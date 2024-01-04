@@ -302,7 +302,8 @@ def do_train(cfg, model, resume=False):
         if cfg.evaluation.eval_period_iterations > 0 and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0:
             do_test(cfg, model, f"training_{iteration}")
             torch.cuda.synchronize()
-        periodic_checkpointer.step(iteration)
+        if distributed.is_main_process():
+            periodic_checkpointer.step(iteration)
 
         iteration = iteration + 1
     metric_logger.synchronize_between_processes()

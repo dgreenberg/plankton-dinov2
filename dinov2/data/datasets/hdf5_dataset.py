@@ -46,9 +46,12 @@ class HDF5Dataset(ImageNet):
 
     @property
     def _entries_path(self) -> str:
-        f"-{self._split.value.upper()}.hdf5"
+        return f"-{self._split.value.upper()}.hdf5"
 
     def _get_extra_full_path(self, extra_path: str) -> str:
+        print(f'root: {self.root}, extra_root: {self._extra_root}, extra_path: {extra_path}')
+        if extra_path is None:
+            extra_path = ''
         return os.path.join(self.root, self._extra_root + extra_path)
 
     def _get_entries(self) -> list:

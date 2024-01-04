@@ -10,7 +10,7 @@ from typing import Any, Dict, Optional
 import torch
 from torch import Tensor
 from torchmetrics import Metric, MetricCollection
-from torchmetrics.classification import MulticlassAccuracy
+from torchmetrics.classification import MulticlassAccuracy, AUROC, AveragePrecision, F1Score, Precision, Recall
 from torchmetrics.utilities.data import dim_zero_cat, select_topk
 
 
@@ -60,6 +60,18 @@ def build_topk_accuracy_metric(average_type: AccuracyAveraging, num_classes: int
     metrics: Dict[str, Metric] = {
         f"top-{k}": MulticlassAccuracy(top_k=k, num_classes=int(num_classes), average=average_type.value) for k in ks
     }
+
+    metrics['precision_ma'] = Precision(task="multiclass", average='macro', num_classes=num_classes)
+    metrics['precision_mi'] = Precision(task="multiclass", average='micro', num_classes=num_classes)
+    metrics['recall_ma'] = Recall(task="multiclass", average='macro', num_classes=num_classes)
+    metrics['recall_mi'] = Recall(task="multiclass", average='micro', num_classes=num_classes)
+    metrics['auroc_ma'] = AUROC(task="multiclass", average='macro', num_classes=num_classes)
+    metrics['auroc_mi'] = AUROC(task="multiclass", average='micro', num_classes=num_classes)
+    metrics['ap_ma'] = AveragePrecision(task="multiclass", average='macro', num_classes=num_classes)
+    metrics['ap_mi'] = AveragePrecision(task="multiclass", average='micro', num_classes=num_classes)
+    metrics['f1_ma'] = F1Score(task="multiclass", average='macro', num_classes=num_classes)
+    metrics['f1_mi'] = F1Score(task="multiclass", average='micro', num_classes=num_classes)
+
     return MetricCollection(metrics)
 
 

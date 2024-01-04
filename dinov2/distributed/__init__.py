@@ -139,9 +139,6 @@ class _TorchDistributedEnvironment:
         dist.barrier()
 
         global RANK, WORLD_SIZE, LOCAL_RANK, LOCAL_WORLD_SIZE
-        print('torch.cuda.device_count()', torch.cuda.device_count())
-        print('torch.distributed.get_rank(group=None)', dist.get_rank(group=None))
-        print('torch.distributed.get_world_size(group=None)', dist.get_world_size(group=None))
         RANK = dist.get_rank(group=None)
         WORLD_SIZE = dist.get_world_size(group=None)
         # LOCAL_WORLD_SIZE = torch.cuda.device_count() # does not work bc detects all gpus on node
@@ -231,7 +228,6 @@ def enable(*, set_cuda_current_device: bool = True, overwrite: bool = False, all
     print('get_global_rank', get_global_rank())
     print('get_global_size', get_global_size())
     print('get_local_size', get_local_size())
-    print('torch.distributed.get_world_size()', dist.get_world_size())
 
     # Finalize setup
     _restrict_print_to_main_process()

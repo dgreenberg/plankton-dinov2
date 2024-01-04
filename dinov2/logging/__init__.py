@@ -23,6 +23,7 @@ def _configure_logger(
     *,
     level: int = logging.DEBUG,
     output: Optional[str] = None,
+    disable_prefix: bool=True,
 ):
     """
     Configure a logger.
@@ -50,7 +51,11 @@ def _configure_logger(
     #   [IWEF]yyyymmdd hh:mm:ss logger threadid file:line] msg
     fmt_prefix = "%(levelname).1s%(asctime)s %(process)s %(name)s %(filename)s:%(lineno)s] "
     fmt_message = "%(message)s"
-    fmt = fmt_prefix + fmt_message
+    if not disable_prefix:
+        fmt = fmt_prefix + fmt_message
+    else:
+        fmt=''
+
     datefmt = "%Y%m%d %H:%M:%S"
     formatter = logging.Formatter(fmt=fmt, datefmt=datefmt)
 
