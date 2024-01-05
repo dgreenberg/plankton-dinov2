@@ -48,7 +48,7 @@ class HDF5Dataset(ImageNet):
     @property
     def _entries_path(self) -> str:
         if self._split.value.upper() == 'ALL':
-            return '*'
+            return '-*.hdf5'
         else:
             return f"-{self._split.value.upper()}.hdf5"
 
