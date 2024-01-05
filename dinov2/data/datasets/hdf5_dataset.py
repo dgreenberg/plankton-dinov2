@@ -87,7 +87,7 @@ class HDF5Dataset(ImageNet):
                     class_ids.append(class_id)
                     class_names.append(class_str)
 
-                if self.do_short_run and len(class_ids) == 5:
+                if self.do_short_run and len(class_ids) == 7:
                     break
 
         if self.do_short_run: # we need to rename the classes in the test case

@@ -3,8 +3,10 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
+import io
 import logging
 import os
+import pickle
 import random
 import subprocess
 from urllib.parse import urlparse
@@ -17,12 +19,17 @@ from dinov2 import distributed
 
 logger = logging.getLogger("dinov2")
 
-
 def load_pretrained_weights(model, pretrained_weights, checkpoint_key):
     if urlparse(pretrained_weights).scheme:  # If it looks like an URL
         state_dict = torch.hub.load_state_dict_from_url(pretrained_weights, map_location="cpu")
     else:
-        state_dict = torch.load(pretrained_weights, map_location='cuda:0')
+        chkpt = torch.load(pretrained_weights, map_location='cpu')
+        if 'model' in chkpt.keys():
+            state_dict = chkpt["model"]
+        else:
+            state_dict = chkpt
+
+        
     if checkpoint_key is not None and checkpoint_key in state_dict:
         logger.info(f"Take key {checkpoint_key} in provided checkpoint dict")
         state_dict = state_dict[checkpoint_key]
@@ -30,6 +37,9 @@ def load_pretrained_weights(model, pretrained_weights, checkpoint_key):
     state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
     # remove `backbone.` prefix induced by multicrop wrapper
     state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
+    state_dict = {k: v for k, v in state_dict.items() if 'student' not in k}
+    state_dict = {k.replace("teacher.", ""): v for k, v in state_dict.items()} # we take teacher for eval
+
     msg = model.load_state_dict(state_dict, strict=False)
     logger.info("Pretrained weights found at {} and loaded with msg: {}".format(pretrained_weights, msg))
 

@@ -67,9 +67,20 @@ def setup(args):
     """
     Create configs and perform basic setups.
     """
+    def adjust_output_file(args):
+        if args is not None:
+            run_name = args.run_name
+        else:
+            run_name = ''
+
+        args.output_dir = os.path.join(args.output_dir, run_name)
+        print('Output dir: ', args.output_dir)
+        
+    adjust_output_file(args)
     cfg = get_cfg_from_args(args)
     os.makedirs(args.output_dir, exist_ok=True)
     default_setup(args)
     apply_scaling_rules_to_cfg(cfg)
-    write_config(cfg, args.output_dir)
+    if distributed.is_main_process():
+        write_config(cfg, args.output_dir)
     return cfg

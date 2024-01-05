@@ -96,9 +96,9 @@ class FSDPCheckpointer(Checkpointer):
 
         data = {}
         with FSDP.state_dict_type(self.model, StateDictType.LOCAL_STATE_DICT):
-            data["model"] = self.model.state_dict()
+            state_dict_cpu = {k: v.cpu() for k,v in self.model.state_dict().items()}
+            data["model"] = state_dict_cpu
 
-        # data["model"] = self.model.state_dict()
         for key, obj in self.checkpointables.items():
             data[key] = obj.state_dict()
         data.update(kwargs)
@@ -108,7 +108,6 @@ class FSDPCheckpointer(Checkpointer):
         assert os.path.basename(save_file) == basename, basename
         self.logger.info("Saving checkpoint to {}".format(save_file))
         with self.path_manager.open(save_file, "wb") as f:
-            data.cpu() # TODO test this
             torch.save(data, f)
         self.tag_last_checkpoint(basename)
 

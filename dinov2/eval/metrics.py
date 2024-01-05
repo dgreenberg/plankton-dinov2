@@ -57,20 +57,19 @@ def build_metric(metric_type: MetricType, *, num_classes: int, ks: Optional[tupl
 
 
 def build_topk_accuracy_metric(average_type: AccuracyAveraging, num_classes: int, ks: tuple = (1, 5)):
+    num_classes = int(num_classes)
     metrics: Dict[str, Metric] = {
         f"top-{k}": MulticlassAccuracy(top_k=k, num_classes=int(num_classes), average=average_type.value) for k in ks
     }
 
-    metrics['precision_ma'] = Precision(task="multiclass", average='macro', num_classes=num_classes)
-    metrics['precision_mi'] = Precision(task="multiclass", average='micro', num_classes=num_classes)
-    metrics['recall_ma'] = Recall(task="multiclass", average='macro', num_classes=num_classes)
-    metrics['recall_mi'] = Recall(task="multiclass", average='micro', num_classes=num_classes)
-    metrics['auroc_ma'] = AUROC(task="multiclass", average='macro', num_classes=num_classes)
-    metrics['auroc_mi'] = AUROC(task="multiclass", average='micro', num_classes=num_classes)
-    metrics['ap_ma'] = AveragePrecision(task="multiclass", average='macro', num_classes=num_classes)
-    metrics['ap_mi'] = AveragePrecision(task="multiclass", average='micro', num_classes=num_classes)
-    metrics['f1_ma'] = F1Score(task="multiclass", average='macro', num_classes=num_classes)
-    metrics['f1_mi'] = F1Score(task="multiclass", average='micro', num_classes=num_classes)
+    metrics['precision_ma'] = Precision(task="multiclass", average='macro', num_classes=num_classes, top_k=1)
+    metrics['precision_mi'] = Precision(task="multiclass", average='micro', num_classes=num_classes, top_k=1)
+    metrics['recall_ma'] = Recall(task="multiclass", average='macro', num_classes=num_classes, top_k=1)
+    metrics['recall_mi'] = Recall(task="multiclass", average='micro', num_classes=num_classes, top_k=1)
+    metrics['auroc'] = AUROC(task="multiclass", average='macro', num_classes=num_classes)
+    metrics['ap'] = AveragePrecision(task="multiclass", average='macro', num_classes=num_classes)
+    metrics['f1_ma'] = F1Score(task="multiclass", average='macro', num_classes=num_classes, top_k=1)
+    metrics['f1_mi'] = F1Score(task="multiclass", average='micro', num_classes=num_classes, top_k=1)
 
     return MetricCollection(metrics)
 

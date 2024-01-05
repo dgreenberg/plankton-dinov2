@@ -295,16 +295,16 @@ def do_train(cfg, model, resume=False):
         metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
 
         if distributed.is_main_process():
-            wandb.log({'lr': lr, 'wd': wd, 'mom': mom, 'last_layer_lr': last_layer_lr, 'current_batch_size':current_batch_size, 'total_loss': losses_reduced, **loss_dict_reduced})
+            current_epoch = iteration // OFFICIAL_EPOCH_LENGTH
+            wandb.log({'epoch': current_epoch, 'lr': lr, 'wd': wd, 'mom': mom, 'last_layer_lr': last_layer_lr,
+                       'total_loss': losses_reduced, **loss_dict_reduced})
 
         # checkpointing and testing
 
         if cfg.evaluation.eval_period_iterations > 0 and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0:
             do_test(cfg, model, f"training_{iteration}")
             torch.cuda.synchronize()
-        if distributed.is_main_process():
-            periodic_checkpointer.step(iteration)
-
+        periodic_checkpointer.step(iteration)
         iteration = iteration + 1
     metric_logger.synchronize_between_processes()
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}

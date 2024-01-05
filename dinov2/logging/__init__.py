@@ -110,17 +110,9 @@ def setup_logging(
     if distributed.is_main_process():
         logging.captureWarnings(capture_warnings)
         _configure_logger(name, level=level, output=output)
-        if args is not None:
-            run_name = args.run_name
-        else:
-            run_name = ''
-
-        args.output_dir = os.path.join(args.output_dir, run_name)
-        os.makedirs(args.output_dir, exist_ok=True)
-        print('Output dir: ', args.output_dir)
 
         if do_eval:
             project='dinov2_plankton_eval'
         else:
             project='dinov2_plankton'
-        wandb.init(name=run_name, entity='kainmueller-lab', project=project, config=args, dir=output)
+        wandb.init(name=args.run_name, entity='kainmueller-lab', project=project, config=args, dir=output)
