@@ -12,3 +12,5 @@ dist/
 wandb/
 .DS_Store
 *.sh~
+
+*.sh
