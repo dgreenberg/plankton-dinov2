@@ -60,7 +60,7 @@ ibot:
   head_hidden_dim: 2048
 train:
   batch_size_per_gpu: 32
-  dataset_path: HDF5Dataset:split=TRAIN:root=/home/jluesch/Documents/data/plankton:extra=*
+  dataset_path: HDF5Dataset:split=ALL:root=/home/jluesch/Documents/data/plankton:extra=*
   output_dir: 'home/jluesch/Documents/output_dir'
   saveckp_freq: 1
   seed: 0

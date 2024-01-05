@@ -15,6 +15,7 @@ class _SplitHDF5Dataset(Enum):
     TRAIN = "train"
     VAL = "val"
     TEST = "test"  # NOTE: torchvision does not support the test split
+    ALL = "all"
 
 
 class HDF5Dataset(ImageNet):
@@ -46,7 +47,10 @@ class HDF5Dataset(ImageNet):
 
     @property
     def _entries_path(self) -> str:
-        return f"-{self._split.value.upper()}.hdf5"
+        if self._split.value.upper() == 'ALL':
+            return '*'
+        else:
+            return f"-{self._split.value.upper()}.hdf5"
 
     def _get_extra_full_path(self, extra_path: str) -> str:
         print(f'root: {self.root}, extra_root: {self._extra_root}, extra_path: {extra_path}')
@@ -63,6 +67,7 @@ class HDF5Dataset(ImageNet):
     def _load_extra(self, extra_path: str):
         extra_full_path = self._get_extra_full_path(extra_path)
         file_list = glob.glob(extra_full_path)
+        print('Datasets file list: ', file_list)
 
         accumulated = []
         class_ids = []
