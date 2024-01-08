@@ -109,8 +109,8 @@ class HDF5Dataset(ImageNet):
         
         unique_class_ids = np.unique([el['class_id'] for el in accumulated])
         unique_class_names = np.unique([el['class_str'] for el in accumulated])
-        print('unique_class_ids', len(unique_class_ids))
-        print('unique_class_names', unique_class_names[:10], len(unique_class_names))
+        print(f'#unique_class_ids: {self._split}, {len(unique_class_ids)}')
+        print(f'#unique_class_names: {unique_class_names[:8]}, {len(unique_class_names)}')
 
         self._entries = accumulated
         self._class_ids = class_ids

@@ -280,7 +280,7 @@ def eval_knn(
         persistent_workers=True,
     )
     num_classes = int(train_labels.max() + 1)
-    print('num_classes', num_classes)
+    print('Train num_classes', num_classes)
     metric_collection = build_topk_accuracy_metric(accuracy_averaging, num_classes=num_classes)
 
     device = torch.cuda.current_device()
