@@ -225,6 +225,7 @@ def do_train(cfg, model, resume=False):
     # training loop
 
     iteration = start_iter
+    tot_nb_seen_samples = 0
 
     logger.info("Starting training from iteration {}".format(start_iter))
     metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
@@ -239,6 +240,7 @@ def do_train(cfg, model, resume=False):
         start_iter,
     ):
         current_batch_size = data["collated_global_crops"].shape[0] / 2
+        tot_nb_seen_samples += current_batch_size
         if iteration > max_iter:
             return
 
@@ -295,8 +297,7 @@ def do_train(cfg, model, resume=False):
         metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
 
         if distributed.is_main_process():
-            current_epoch = iteration // OFFICIAL_EPOCH_LENGTH
-            wandb.log({'epoch': current_epoch, 'lr': lr, 'wd': wd, 'mom': mom, 'last_layer_lr': last_layer_lr,
+            wandb.log({'#samples': tot_nb_seen_samples, 'lr': lr, 'wd': wd, 'mom': mom, 'last_layer_lr': last_layer_lr,
                        'total_loss': losses_reduced, **loss_dict_reduced})
 
         # checkpointing and testing
