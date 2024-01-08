@@ -77,7 +77,7 @@ def get_args_parser(
     parser.add_argument(
         "--num-workers",
         type=int,
-        default=2,
+        default=4,
         help="Number of workers in DataLoader.",
     )
     parser.add_argument(
