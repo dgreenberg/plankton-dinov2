@@ -369,7 +369,6 @@ def eval_knn_with_model(
     if distributed.is_main_process():
         for knn_ in results_dict_knn.keys():
             metric_log_msg = f"KNN {knn_[1]} classifier result: "
-            print(results_dict_knn[knn_].keys())
             for metric_name in results_dict_knn[knn_].keys():
                 metric_val = results_dict_knn[knn_][metric_name].item()
                 results_dict[f"{knn_} {metric_name}"] = metric_val

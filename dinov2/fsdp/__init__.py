@@ -95,7 +95,8 @@ class FSDPCheckpointer(Checkpointer):
             return
 
         data = {}
-        with FSDP.state_dict_type(self.model, StateDictType.LOCAL_STATE_DICT):
+        state_dict_type = StateDictType.LOCAL_STATE_DICT if distributed.get_global_size() > 1 else StateDictType.FULL_STATE_DICT
+        with FSDP.state_dict_type(self.model, state_dict_type):
             state_dict_cpu = {k: v.cpu() for k,v in self.model.state_dict().items()}
             data["model"] = state_dict_cpu
 

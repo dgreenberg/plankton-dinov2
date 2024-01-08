@@ -47,6 +47,8 @@ class HDF5Dataset(ImageNet):
 
     @property
     def _entries_path(self) -> str:
+        if self.root.endswith('.hdf5'): # if we have a single file
+            return self.root
         if self._split.value.upper() == 'ALL':
             return '-*.hdf5'
         else:
@@ -56,7 +58,10 @@ class HDF5Dataset(ImageNet):
         print(f'root: {self.root}, extra_root: {self._extra_root}, extra_path: {extra_path}')
         if extra_path is None:
             extra_path = ''
-        return os.path.join(self.root, self._extra_root + extra_path)
+        if os.path.isfile(self.root):
+            return self.root
+        else:
+            return os.path.join(self.root, self._extra_root + extra_path)
 
     def _get_entries(self) -> list:
         if self._entries is None:
