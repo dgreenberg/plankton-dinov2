@@ -75,6 +75,12 @@ def get_args_parser(
         help="Batch size.",
     )
     parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=2,
+        help="Number of workers in DataLoader.",
+    )
+    parser.add_argument(
         "--n-per-class-list",
         nargs="+",
         type=int,
@@ -400,7 +406,7 @@ def main(args):
         transform=None,
         gather_on_cpu=args.gather_on_cpu,
         batch_size=args.batch_size,
-        num_workers=5,
+        num_workers=args.num_workers,
         n_per_class_list=args.n_per_class_list,
         n_tries=args.n_tries,
     )

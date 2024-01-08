@@ -67,10 +67,6 @@ def evaluate(
     for samples, targets, *_ in metric_logger.log_every(data_loader, 10, header):
         outputs = model(samples.to(device))
         targets = targets.to(device)
-        print(outputs.keys())
-        for k in outputs.keys():
-            if torch.is_tensor(outputs[k]):
-                print(k, outputs[k].shape)
 
         if criterion is not None:
             loss = criterion(outputs, targets)
@@ -78,10 +74,6 @@ def evaluate(
 
         for k, metric in metrics.items():
             metric_inputs = postprocessors[k](outputs, targets)
-            print(metric_inputs.keys())
-            for k in metric_inputs.keys():
-                if torch.is_tensor(metric_inputs[k]):
-                    print(k, metric_inputs[k].shape)
             metric.update(**metric_inputs)
 
     metric_logger.synchronize_between_processes()

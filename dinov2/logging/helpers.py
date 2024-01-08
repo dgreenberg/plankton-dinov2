@@ -49,6 +49,9 @@ class MetricLogger(object):
             elif name.endswith('loss'):
                 name = name[:-(len('loss')+1)]
 
+            if 'last_layer_lr' in name:
+                name = 'll_lr'
+
             loss_str.append("{}: {}".format(name, str(meter)))
         return self.delimiter.join(loss_str)
 
