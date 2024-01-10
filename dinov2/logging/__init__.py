@@ -23,7 +23,7 @@ def _configure_logger(
     *,
     level: int = logging.DEBUG,
     output: Optional[str] = None,
-    disable_prefix: bool=True,
+    disable_prefix: bool = True,
 ):
     """
     Configure a logger.
@@ -54,7 +54,7 @@ def _configure_logger(
     if not disable_prefix:
         fmt = fmt_prefix + fmt_message
     else:
-        fmt=''
+        fmt = ""
 
     datefmt = "%Y%m%d %H:%M:%S"
     formatter = logging.Formatter(fmt=fmt, datefmt=datefmt)
@@ -112,7 +112,8 @@ def setup_logging(
         _configure_logger(name, level=level, output=output)
 
         if do_eval:
-            project='dinov2_plankton_eval'
+            project = "dinov2_plankton_eval"
         else:
-            project='dinov2_plankton'
-        wandb.init(name=args.run_name, entity='kainmueller-lab', project=project, config=args, dir=output)
+            project = "dinov2_plankton"
+
+        wandb.init(name=args.run_name, entity="kainmueller-lab", project=project, config=args, dir=output)

@@ -8,6 +8,7 @@ import logging
 import math
 import os
 from functools import partial
+import sys
 import wandb
 from enum import Enum
 import random
@@ -59,15 +60,7 @@ def get_args_parser(add_help: bool = True):
         default=None,
         nargs=argparse.REMAINDER,
     )
-    parser.add_argument(
-        "--output-dir",
-        default="",
-        type=str,
-        help="Output directory to save logs and checkpoints",
-    )
-    parser.add_argument(
-        "--run_name", type=str, help="Name for the wandb log", default=f"run_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
-    )
+    parser.add_argument("--run_name", type=str, help="Name for the wandb log", default="run_")
 
     return parser
 
@@ -125,6 +118,7 @@ def build_schedulers(cfg):
 
 
 def select_augmentations(cfg):
+    print(f"---- USING AUGMENTATION: {cfg.train.augmentations} ----")
     if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
         data_transform_cpu = DataAugmentationDINO(
             cfg.crops.global_crops_scale,
@@ -135,7 +129,7 @@ def select_augmentations(cfg):
             do_transform_on_gpu=False,
         )
         data_transform_gpu = None
-    if cfg.train.augmentations == AugmentationType.TORCHV_GPU.value:
+    elif cfg.train.augmentations == AugmentationType.TORCHV_GPU.value:
         data_transform_cpu = torchvision.transforms.ToTensor()
         data_transform_gpu = DataAugmentationDINO(
             cfg.crops.global_crops_scale,
@@ -158,6 +152,10 @@ def select_augmentations(cfg):
         )
     else:
         print(f"ERROR: type augmentation type {cfg.train.augmentations} is not supported")
+        print(
+            f"Supported types are: {AugmentationType.TORCHV_CPU.value}, {AugmentationType.TORCHV_GPU.value}, {AugmentationType.KORNIA_GPU.value}"
+        )
+        sys.exit(1)
 
     return data_transform_cpu, data_transform_gpu
 

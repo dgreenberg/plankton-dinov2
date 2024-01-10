@@ -25,3 +25,5 @@ notebooks/dataloader_benchmark_results_10000_gpuTrue/time_vs_num_workers_worksta
 notebooks/
 *.csv
 *.png
+logs/log.txt
+notebooks/test_nb.ipynb
