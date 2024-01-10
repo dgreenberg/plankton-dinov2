@@ -42,7 +42,7 @@ compute_precision:
         buffer_dtype: fp32
 dino:
   loss_weight: 1.0
-  head_n_prototypes: 1024 #65536
+  head_n_prototypes: 4096 #65536
   head_bottleneck_dim: 256
   head_nlayers: 3
   head_hidden_dim: 2048
@@ -54,20 +54,21 @@ ibot:
   - 0.1
   - 0.5
   separate_head: false
-  head_n_prototypes: 1024 #65536
+  head_n_prototypes: 4096 #65536
   head_bottleneck_dim: 256
   head_nlayers: 3
   head_hidden_dim: 2048
 train:
-  batch_size_per_gpu: 32
-  dataset_path: HDF5Dataset:split=ALL:root=/home/jluesch/Documents/data/plankton:extra=*
+  batch_size_per_gpu: 16
+  dataset_path: HDF5Dataset:split=TRAIN:root=/home/jluesch/Documents/data/plankton/2007-TRAIN.hdf5:extra=*
   output_dir: 'home/jluesch/Documents/output_dir'
   saveckp_freq: 1
   seed: 0
-  num_workers: 4
-  OFFICIAL_EPOCH_LENGTH: 10
+  num_workers: 16
+  OFFICIAL_EPOCH_LENGTH: 1250
   cache_dataset: true
   centering: "sinkhorn_knopp" # or "centering"
+  augmentations: "torchvision_cpu"
 student:
   arch: vit_small
   patch_size: 14
@@ -88,15 +89,15 @@ teacher:
   final_momentum_teacher: 1
   warmup_teacher_temp: 0.04
   teacher_temp: 0.07
-  warmup_teacher_temp_epochs: 3
+  warmup_teacher_temp_epochs: 30
 optim:
-  epochs: 3
+  epochs: 100
   weight_decay: 0.04
   weight_decay_end: 0.4
   base_lr: 0.001
   # base_lr: 0.004  # learning rate for a batch size of 1024
   lr: 0.  # will be set after applying scaling rule
-  warmup_epochs: 3
+  warmup_epochs: 10
   min_lr: 1.0e-06
   clip_grad: 3.0
   freeze_last_layer_epochs: 1
@@ -116,4 +117,4 @@ crops:
   global_crops_size: 224
   local_crops_size: 98
 evaluation:
-  eval_period_iterations: 20
+  eval_period_iterations: 1250

@@ -3,10 +3,25 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
-from typing import Sequence
+from typing import Any, Sequence, Union
 
 import torch
 from torchvision import transforms
+from kornia import augmentation
+
+
+class KorniaGaussianBlur(augmentation.RandomGaussianBlur):
+    """
+    Apply Gaussian Blur to the a Tensor using Kornia.
+    """
+
+    def __init__(self, *, p: float = 0.5, radius_min: float = 0.1, radius_max: float = 2.0):
+        super().__init__(
+            kernel_size=9,
+            sigma=(radius_min, radius_max),
+            same_on_batch=False,
+            p=p,
+        )
 
 
 class GaussianBlur(transforms.RandomApply):
@@ -46,8 +61,12 @@ IMAGENET_DEFAULT_STD = (0.229, 0.224, 0.225)
 def make_normalize_transform(
     mean: Sequence[float] = IMAGENET_DEFAULT_MEAN,
     std: Sequence[float] = IMAGENET_DEFAULT_STD,
-) -> transforms.Normalize:
-    return transforms.Normalize(mean=mean, std=std)
+    use_kornia=False,
+) -> Union[transforms.Normalize, augmentation.Normalize]:
+    if use_kornia:
+        return augmentation.Normalize(mean, std, p=1.0, keepdim=False)
+    else:
+        return transforms.Normalize(mean=mean, std=std)
 
 
 # This roughly matches torchvision's preset for classification training:

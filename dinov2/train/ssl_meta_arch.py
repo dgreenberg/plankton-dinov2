@@ -45,7 +45,7 @@ class SSLMetaArch(nn.Module):
         if cfg.student.pretrained_weights:
             chkpt = torch.load(cfg.student.pretrained_weights)
             logger.info(f"OPTIONS -- pretrained weights: loading from {cfg.student.pretrained_weights}")
-            if 'model' in chkpt.keys():
+            if "model" in chkpt.keys():
                 model_params = chkpt["model"]
             else:
                 model_params = chkpt
@@ -139,15 +139,26 @@ class SSLMetaArch(nn.Module):
         assert n_global_crops == 2
         n_local_crops = self.cfg.crops.local_crops_number
 
-        global_crops = images["collated_global_crops"].cuda(non_blocking=True)
-        local_crops = images["collated_local_crops"].cuda(non_blocking=True)
+        if not images["collated_global_crops"].is_cuda:
+            global_crops = images["collated_global_crops"].cuda(non_blocking=True)
+            local_crops = images["collated_local_crops"].cuda(non_blocking=True)
 
-        masks = images["collated_masks"].cuda(non_blocking=True)
-        mask_indices_list = images["mask_indices_list"].cuda(non_blocking=True)
-        n_masked_patches_tensor = images["n_masked_patches"].cuda(non_blocking=True)
+            masks = images["collated_masks"].cuda(non_blocking=True)
+            mask_indices_list = images["mask_indices_list"].cuda(non_blocking=True)
+            n_masked_patches_tensor = images["n_masked_patches"].cuda(non_blocking=True)
+            masks_weight = images["masks_weight"].cuda(non_blocking=True)
+
+        else:
+            global_crops = images["collated_global_crops"]
+            local_crops = images["collated_local_crops"]
+
+            masks = images["collated_masks"]
+            mask_indices_list = images["mask_indices_list"]
+            n_masked_patches_tensor = images["n_masked_patches"]
+            masks_weight = images["masks_weight"]
+
         n_masked_patches = mask_indices_list.shape[0]
         upperbound = images["upperbound"]
-        masks_weight = images["masks_weight"].cuda(non_blocking=True)
 
         n_local_crops_loss_terms = max(n_local_crops * n_global_crops, 1)
         n_global_crops_loss_terms = (n_global_crops - 1) * n_global_crops

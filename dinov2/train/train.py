@@ -9,9 +9,12 @@ import math
 import os
 from functools import partial
 import wandb
+from enum import Enum
+import random
 
 from fvcore.common.checkpoint import PeriodicCheckpointer
 import torch
+import torchvision
 
 from datetime import datetime
 
@@ -30,6 +33,12 @@ torch.backends.cuda.matmul.allow_tf32 = True  # PyTorch 1.12 sets this to False 
 logger = logging.getLogger("dinov2")
 
 
+class AugmentationType(Enum):
+    KORNIA_GPU = "kornia_gpu"
+    TORCHV_CPU = "torchvision_cpu"
+    TORCHV_GPU = "torchvision_gpu"
+
+
 def get_args_parser(add_help: bool = True):
     parser = argparse.ArgumentParser("DINOv2 training", add_help=add_help)
     parser.add_argument("--config-file", default="", metavar="FILE", help="path to config file")
@@ -43,9 +52,9 @@ def get_args_parser(add_help: bool = True):
     parser.add_argument(
         "opts",
         help="""
-Modify config options at the end of the command. For Yacs configs, use
-space-separated "PATH.KEY VALUE" pairs.
-For python-based LazyConfig, use "path.key=value".
+        Modify config options at the end of the command. For Yacs configs, use
+        space-separated "PATH.KEY VALUE" pairs.
+        For python-based LazyConfig, use "path.key=value".
         """.strip(),
         default=None,
         nargs=argparse.REMAINDER,
@@ -57,10 +66,7 @@ For python-based LazyConfig, use "path.key=value".
         help="Output directory to save logs and checkpoints",
     )
     parser.add_argument(
-        "--run_name",
-        type=str,
-        help="Name for the wandb log",
-        default=f"run_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
+        "--run_name", type=str, help="Name for the wandb log", default=f"run_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     )
 
     return parser
@@ -118,6 +124,44 @@ def build_schedulers(cfg):
     )
 
 
+def select_augmentations(cfg):
+    if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
+        data_transform_cpu = DataAugmentationDINO(
+            cfg.crops.global_crops_scale,
+            cfg.crops.local_crops_scale,
+            cfg.crops.local_crops_number,
+            global_crops_size=cfg.crops.global_crops_size,
+            local_crops_size=cfg.crops.local_crops_size,
+            do_transform_on_gpu=False,
+        )
+        data_transform_gpu = None
+    if cfg.train.augmentations == AugmentationType.TORCHV_GPU.value:
+        data_transform_cpu = torchvision.transforms.ToTensor()
+        data_transform_gpu = DataAugmentationDINO(
+            cfg.crops.global_crops_scale,
+            cfg.crops.local_crops_scale,
+            cfg.crops.local_crops_number,
+            global_crops_size=cfg.crops.global_crops_size,
+            local_crops_size=cfg.crops.local_crops_size,
+            do_transform_on_gpu=True,
+        )
+    elif cfg.train.augmentations == AugmentationType.KORNIA_GPU.value:
+        data_transform_cpu = torchvision.transforms.ToTensor()
+        data_transform_gpu = DataAugmentationDINO(
+            cfg.crops.global_crops_scale,
+            cfg.crops.local_crops_scale,
+            cfg.crops.local_crops_number,
+            global_crops_size=cfg.crops.global_crops_size,
+            local_crops_size=cfg.crops.local_crops_size,
+            do_transform_on_gpu=True,
+            use_kornia=True,
+        )
+    else:
+        print(f"ERROR: type augmentation type {cfg.train.augmentations} is not supported")
+
+    return data_transform_cpu, data_transform_gpu
+
+
 def apply_optim_scheduler(optimizer, lr, wd, last_layer_lr):
     for param_group in optimizer.param_groups:
         is_last_layer = param_group["is_last_layer"]
@@ -158,7 +202,7 @@ def do_train(cfg, model, resume=False):
     # checkpointer
     checkpointer = FSDPCheckpointer(model, cfg.train.output_dir, optimizer=optimizer, save_to_disk=True)
 
-    print('cfg.MODEL.WEIGHTS', cfg.MODEL.WEIGHTS, 'resume', resume)
+    print("cfg.MODEL.WEIGHTS", cfg.MODEL.WEIGHTS, "resume", resume)
     if os.path.isfile(cfg.MODEL.WEIGHTS):
         start_iter = checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get("iteration", -1) + 1
     else:
@@ -184,13 +228,7 @@ def do_train(cfg, model, resume=False):
         max_num_patches=0.5 * img_size // patch_size * img_size // patch_size,
     )
 
-    data_transform = DataAugmentationDINO(
-        cfg.crops.global_crops_scale,
-        cfg.crops.local_crops_scale,
-        cfg.crops.local_crops_number,
-        global_crops_size=cfg.crops.global_crops_size,
-        local_crops_size=cfg.crops.local_crops_size,
-    )
+    data_transform_cpu, data_transform_gpu = select_augmentations(cfg)
 
     collate_fn = partial(
         collate_data_and_cast,
@@ -205,22 +243,35 @@ def do_train(cfg, model, resume=False):
 
     dataset = make_dataset(
         dataset_str=cfg.train.dataset_path,
-        transform=data_transform,
+        transform=data_transform_cpu,
         target_transform=lambda _: (),
     )
     # sampler_type = SamplerType.INFINITE
     sampler_type = SamplerType.SHARDED_INFINITE
-    data_loader = make_data_loader(
-        dataset=dataset,
-        batch_size=cfg.train.batch_size_per_gpu,
-        num_workers=cfg.train.num_workers,
-        shuffle=True,
-        seed=start_iter,  # TODO: Fix this -- cfg.train.seed
-        sampler_type=sampler_type,
-        sampler_advance=0,  # TODO(qas): fix this -- start_iter * cfg.train.batch_size_per_gpu,
-        drop_last=True,
-        collate_fn=collate_fn,
-    )
+    if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
+        data_loader = make_data_loader(
+            dataset=dataset,
+            batch_size=cfg.train.batch_size_per_gpu,
+            num_workers=cfg.train.num_workers,
+            shuffle=True,
+            seed=start_iter,  # TODO: Fix this -- cfg.train.seed
+            sampler_type=sampler_type,
+            sampler_advance=0,  # TODO(qas): fix this -- start_iter * cfg.train.batch_size_per_gpu,
+            drop_last=True,
+            collate_fn=collate_fn,
+        )
+    else:
+        data_loader = make_data_loader(
+            dataset=dataset,
+            batch_size=cfg.train.batch_size_per_gpu,
+            num_workers=cfg.train.num_workers,
+            shuffle=True,
+            seed=start_iter,  # TODO: Fix this -- cfg.train.seed
+            sampler_type=sampler_type,
+            sampler_advance=0,  # TODO(qas): fix this -- start_iter * cfg.train.batch_size_per_gpu,
+            drop_last=True,
+            collate_fn=None,
+        )
 
     # training loop
 
@@ -239,8 +290,22 @@ def do_train(cfg, model, resume=False):
         max_iter,
         start_iter,
     ):
+        if data_transform_gpu is not None:
+            # current_device_nb = model.student.backbone.device
+            if isinstance(data, list):
+                data = data[0].to(device=f"cuda:{torch.cuda.current_device()}")
+
+            data = data_transform_gpu(data)
+            data = collate_fn(data)  # collate_fn collates crops and computes masks tensors
+            # TODO: teacher crops are not used????
+
+            data = {
+                k: (v.to(device=f"cuda:{torch.cuda.current_device()}") if torch.is_tensor(v) and not v.is_cuda else v)
+                for k, v in data.items()
+            }
+
         current_batch_size = data["collated_global_crops"].shape[0] / 2
-        tot_nb_seen_samples += current_batch_size * distributed.get_global_size() # to get effective batch size
+        tot_nb_seen_samples += current_batch_size * distributed.get_global_size()  # to get effective batch size
         if iteration > max_iter:
             return
 
@@ -297,8 +362,17 @@ def do_train(cfg, model, resume=False):
         metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
 
         if distributed.is_main_process():
-            wandb.log({'#samples': tot_nb_seen_samples, 'lr': lr, 'wd': wd, 'mom': mom, 'last_layer_lr': last_layer_lr,
-                       'total_loss': losses_reduced, **loss_dict_reduced})
+            wandb.log(
+                {
+                    "#samples": tot_nb_seen_samples,
+                    "lr": lr,
+                    "wd": wd,
+                    "mom": mom,
+                    "ll_lr": last_layer_lr,
+                    "total_loss": losses_reduced,
+                    **loss_dict_reduced,
+                }
+            )
 
         # checkpointing and testing
 
