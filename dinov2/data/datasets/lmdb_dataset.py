@@ -41,20 +41,17 @@ class LMDBDataset(ImageNet):
     @property
     def _entries_path(self) -> str:
         if self.root.endswith("TRAIN") or self.root.endswith("VAL"):  # if we have a single file
-            return self.root
-        if self._split.value.upper() == "ALL":
+            return self.root + "_*"
+        elif self._split.value.upper() == "ALL":
             return "*"
         else:
             return f"-{self._split.value.upper()}_*"
 
     def _get_extra_full_path(self, extra_path: str) -> str:
-        print(f"root: {self.root}, extra_root: {self._extra_root}, extra_path: {extra_path}")
-        if extra_path is None:
-            extra_path = ""
-        if os.path.isfile(self.root):
-            return self.root
+        if not os.path.isdir(self.root):
+            return extra_path
         else:
-            return os.path.join(self.root, self._extra_root + extra_path)
+            return self.root
 
     def _get_entries(self) -> list:
         if self._entries is None:
@@ -64,6 +61,7 @@ class LMDBDataset(ImageNet):
 
     def _load_extra(self, extra_path: str):
         extra_full_path = self._get_extra_full_path(extra_path)
+        print("extra_full_path", extra_full_path)
         file_list = glob.glob(extra_full_path)
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
         file_list_imgs = sorted([el for el in file_list if el.endswith("imgs") or el.endswith("images")])
@@ -98,6 +96,10 @@ class LMDBDataset(ImageNet):
 
                 accumulated.append(entry)
                 global_idx += 1
+
+            # free up resources
+            lmdb_cursor.close()
+            lmdb_env_labels.close()
 
         class_ids = [el["class_id"] for el in accumulated]
         print(f"#unique_class_ids: {self._split}, {len(set(class_ids))}")
