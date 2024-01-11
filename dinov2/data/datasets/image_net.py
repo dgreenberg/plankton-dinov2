@@ -22,9 +22,10 @@ class _Split(Enum):
     TRAIN = "train"
     VAL = "val"
     TEST = "test"  # NOTE: torchvision does not support the test split
+    ALL = "all"
 
     @property
-    def length(self) -> int:
+    def length(self) -> int:  # TODO remove hardcoded len
         split_lengths = {
             _Split.TRAIN: 1_281_167,
             _Split.VAL: 50_000,
