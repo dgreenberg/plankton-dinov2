@@ -1,10 +1,8 @@
 import glob
-import json
 import os
 from enum import Enum
 from typing import Union, Optional, Tuple
 
-import h5py
 import lmdb
 import numpy as np
 
@@ -20,19 +18,15 @@ class _SplitLMDBDataset(Enum):
     ALL = "all"
 
 
-class HDF5Dataset(ImageNet):
+class LMDBDataset(ImageNet):
     Target = _TargetLMDBDataset
     Split = _SplitLMDBDataset
     lmdb_handles = {}
 
     def get_image_data(self, index: int) -> bytes:
-        entries = self._get_entries()
-        entry = entries[index]
-        print(entry.keys(), flush=True)
-        image_relpath = entry["path"]
-        hdf5_path = entry["hdf5_file"]
-        hdf5_file = self.hdf5_handles[hdf5_path]
-        image_data = hdf5_file[image_relpath][()]
+        entry = self._entries[index]
+        lmdb_txn = self._lmdb_txns[entry["lmdb_imgs_file"]]
+        image_data = lmdb_txn.get(str(entry["index"]).encode("utf-8"))
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
@@ -51,7 +45,7 @@ class HDF5Dataset(ImageNet):
         if self._split.value.upper() == "ALL":
             return "*"
         else:
-            return f"-{self._split.value.upper()}"
+            return f"-{self._split.value.upper()}_*"
 
     def _get_extra_full_path(self, extra_path: str) -> str:
         print(f"root: {self.root}, extra_root: {self._extra_root}, extra_path: {extra_path}")
@@ -71,29 +65,42 @@ class HDF5Dataset(ImageNet):
     def _load_extra(self, extra_path: str):
         extra_full_path = self._get_extra_full_path(extra_path)
         file_list = glob.glob(extra_full_path)
-        print("Datasets file list: ", file_list)
+        file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
+        file_list_imgs = sorted([el for el in file_list if el.endswith("imgs") or el.endswith("images")])
+        print("Datasets imgs file list: ", file_list_imgs)
+        print("Datasets labels file list: ", file_list_labels)
 
         accumulated = []
-        class_ids = []
+        self._lmdb_txns = dict()
+        global_idx = 0
 
         if self.do_short_run:
-            file_list = file_list[:1]
-        for lmdb_path in file_list:
-            lmdb_env = lmdb.open(lmdb_path)  # "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
+            file_list = file_list_labels[:1]
+        for lmdb_path_labels, lmdb_path_imgs in zip(file_list_labels, file_list_imgs):
+            lmdb_env_labels = lmdb.open(lmdb_path_labels, readonly=True, lock=False, readahead=False, meminit=False)
+            lmdb_env_imgs = lmdb.open(lmdb_path_imgs, readonly=True, lock=False, readahead=False, meminit=False)
+            # ex: "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
 
-            lmdb_txn = lmdb_env.begin()
-            lmdb_cursor = lmdb_txn.cursor()
+            print("lmdb_env_labels.stat()", lmdb_env_labels.stat())
+            print("lmdb_env_imgs.stat()", lmdb_env_imgs.stat())
 
-            self.lmdb_handles[lmdb_cursor] = file
+            lmdb_txn_labels = lmdb_env_labels.begin()
+            lmdb_txn_imgs = lmdb_env_imgs.begin()
+            # save img tcxn from which to get labels later
+            self._lmdb_txns[lmdb_path_imgs] = lmdb_txn_imgs
 
-            # Add the HDF5 file name to each entry and accumulate the file entries
+            lmdb_cursor = lmdb_txn_labels.cursor()
             for key, value in lmdb_cursor:
-                print(int(key.decode()))
-                entry = int(key.decode())
-                entry["hdf5_file"] = hdf5_file
-                accumulated.append(entry)
+                entry = dict()
+                entry["index"] = int(key.decode())
+                entry["class_id"] = int(value.decode())
+                entry["lmdb_imgs_file"] = lmdb_path_imgs
 
-        print(f"#unique_class_ids: {self._split}, {len(len(set(accumulated)))}")
+                accumulated.append(entry)
+                global_idx += 1
+
+        class_ids = [el["class_id"] for el in accumulated]
+        print(f"#unique_class_ids: {self._split}, {len(set(class_ids))}")
 
         self._entries = accumulated
         self._class_ids = class_ids
@@ -103,5 +110,5 @@ class HDF5Dataset(ImageNet):
         return len(entries)
 
     def close(self):
-        for handle in self.hdf5_handles.values():
+        for handle in self.lmdb_handles.values():
             handle.close()

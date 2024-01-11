@@ -16,6 +16,7 @@ import random
 from fvcore.common.checkpoint import PeriodicCheckpointer
 import torch
 from torchvision.transforms import v2
+import torchvision
 
 from datetime import datetime
 
@@ -182,6 +183,8 @@ def do_test(cfg, model, iteration):
 
 
 def do_train(cfg, model, resume=False):
+    torchvision.disable_beta_transforms_warning()
+
     model.train()
     if cfg.train.use_torch_compile:
         print("--- COMPILING TORCH MODULE ---")

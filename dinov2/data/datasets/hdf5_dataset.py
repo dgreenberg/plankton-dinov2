@@ -20,8 +20,8 @@ class _SplitHDF5Dataset(Enum):
 
 
 class HDF5Dataset(ImageNet):
-    Target = Union[_TargetHDF5Dataset]
-    Split = Union[_SplitHDF5Dataset]
+    Target = _TargetHDF5Dataset
+    Split = _SplitHDF5Dataset
     hdf5_handles = {}
 
     def get_image_data(self, index: int) -> bytes:

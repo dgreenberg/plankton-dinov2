@@ -64,11 +64,11 @@ train:
   output_dir: 'home/jluesch/Documents/output_dir'
   saveckp_freq: 1
   seed: 0
-  num_workers: 16
+  num_workers: 4
   OFFICIAL_EPOCH_LENGTH: 1250
   cache_dataset: true
   centering: "sinkhorn_knopp" # or "centering"
-  augmentations: "torchvision_gpu"
+  augmentations: "kornia_gpu"
   use_torch_compile: true
 student:
   arch: vit_small

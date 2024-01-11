@@ -10,6 +10,7 @@ from typing import Any, Callable, List, Optional, TypeVar
 import torch
 from torch.utils.data import Sampler
 
+from .datasets.lmdb_dataset import LMDBDataset
 from .datasets import ImageNet, ImageNet22k
 from .datasets.hdf5_dataset import HDF5Dataset
 from .samplers import EpochSampler, InfiniteSampler, ShardedInfiniteSampler
@@ -52,20 +53,21 @@ def _parse_dataset_str(dataset_str: str):
         assert key in ("root", "extra", "split", "do_short_run")
         kwargs[key] = value
 
+    if "split" in kwargs:
+        kwargs["split"] = ImageNet.Split[kwargs["split"]]
     if name == "ImageNet":
         class_ = ImageNet
-        if "split" in kwargs:
-            kwargs["split"] = ImageNet.Split[kwargs["split"]]
     elif name == "ImageNet22k":
         class_ = ImageNet22k
     elif name == "HDF5Dataset":
-        if 'do_short_run' in kwargs.keys():
-            kwargs['do_short_run']=True
+        if "do_short_run" in kwargs.keys():
+            kwargs["do_short_run"] = True
         else:
-            kwargs['do_short_run']=False
+            kwargs["do_short_run"] = False
         class_ = HDF5Dataset
-        if "split" in kwargs:
-            kwargs["split"] = HDF5Dataset.Split[kwargs["split"]]
+    elif name == "LMDBDataset":
+        class_ = LMDBDataset
+
     else:
         raise ValueError(f'Unsupported dataset "{name}"')
 
@@ -92,7 +94,7 @@ def make_dataset(
     logger.info(f'using dataset: "{dataset_str}"')
 
     class_, kwargs = _parse_dataset_str(dataset_str)
-    print('Dataset kwargs', kwargs)
+    print("Dataset kwargs", kwargs)
     dataset = class_(transform=transform, target_transform=target_transform, **kwargs)
 
     logger.info(f"# of dataset samples: {len(dataset):,d}")

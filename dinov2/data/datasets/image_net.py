@@ -53,8 +53,8 @@ class _Split(Enum):
 
 
 class ImageNet(ExtendedVisionDataset):
-    Target = Union[_Target]
-    Split = Union[_Split]
+    Target = _Target
+    Split = _Split
 
     def __init__(
         self,
