@@ -10,6 +10,8 @@ import random
 def collate_data_and_cast(samples, mask_ratio_tuple, mask_probability, dtype, n_tokens=None, mask_generator=None):
     # dtype = torch.half  # TODO: Remove
 
+    # samples dict_keys(['global_crops', 'global_crops_teacher', 'local_crops', 'offsets'])
+    # TODO: use global_crops_teacher in returned dict
     # from (nb_crops, b, c, h, w) to (nb_crops * b, c, h, w)
     if isinstance(samples, dict):  # on gpu
         collated_global_crops = torch.cat(samples["global_crops"], dim=0)

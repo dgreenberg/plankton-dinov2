@@ -11,6 +11,7 @@ from dinov2.data.datasets import ImageNet
 
 _TargetHDF5Dataset = int
 
+
 class _SplitHDF5Dataset(Enum):
     TRAIN = "train"
     VAL = "val"
@@ -47,17 +48,17 @@ class HDF5Dataset(ImageNet):
 
     @property
     def _entries_path(self) -> str:
-        if self.root.endswith('.hdf5'): # if we have a single file
+        if self.root.endswith(".hdf5"):  # if we have a single file
             return self.root
-        if self._split.value.upper() == 'ALL':
-            return '-*.hdf5'
+        if self._split.value.upper() == "ALL":
+            return "-*.hdf5"
         else:
             return f"-{self._split.value.upper()}.hdf5"
 
     def _get_extra_full_path(self, extra_path: str) -> str:
-        print(f'root: {self.root}, extra_root: {self._extra_root}, extra_path: {extra_path}')
+        print(f"root: {self.root}, extra_root: {self._extra_root}, extra_path: {extra_path}")
         if extra_path is None:
-            extra_path = ''
+            extra_path = ""
         if os.path.isfile(self.root):
             return self.root
         else:
@@ -72,7 +73,7 @@ class HDF5Dataset(ImageNet):
     def _load_extra(self, extra_path: str):
         extra_full_path = self._get_extra_full_path(extra_path)
         file_list = glob.glob(extra_full_path)
-        print('Datasets file list: ', file_list)
+        print("Datasets file list: ", file_list)
 
         accumulated = []
         class_ids = []
@@ -81,18 +82,19 @@ class HDF5Dataset(ImageNet):
         if self.do_short_run:
             file_list = file_list[:1]
         for hdf5_file in file_list:
-            file = h5py.File(hdf5_file, 'r')
+            file = h5py.File(hdf5_file, "r")
             self.hdf5_handles[hdf5_file] = file
             # Read the JSON string from the 'file_index' dataset
-            file_index_json = file['file_index'][()]
+            file_index_json = file["file_index"][()]
             file_index = json.loads(file_index_json)
 
             # Add the HDF5 file name to each entry and accumulate the file entries
-            for entry in file_index['files']:
-                entry['hdf5_file'] = hdf5_file  # Add the HDF5 file name to the entry
-                accumulated.append(entry)
-                class_id = entry['class_id']
-                class_str = entry['class_str']
+            for entry in file_index["files"]:
+                entry["hdf5_file"] = hdf5_file  # Add the HDF5 file name to the entry
+                class_entry = {"class_id": entry["class_id"], "class_str": entry["class_str"]}
+                accumulated.append(class_entry)
+                class_id = entry["class_id"]
+                class_str = entry["class_str"]
                 if class_id not in class_ids:
                     class_ids.append(class_id)
                     class_names.append(class_str)
@@ -100,17 +102,17 @@ class HDF5Dataset(ImageNet):
                 if self.do_short_run and len(class_ids) == 7:
                     break
 
-        if self.do_short_run: # we need to rename the classes in the test case
+        if self.do_short_run:  # we need to rename the classes in the test case
             unique_class_ids = list(np.unique(class_ids))
             unique_class_names = list(np.unique(class_names))
             for dict1 in accumulated:
-                dict1['class_id'] = unique_class_ids.index(dict1['class_id'])
-                dict1['class_str'] = str(unique_class_names.index(dict1['class_str']))
-        
-        unique_class_ids = np.unique([el['class_id'] for el in accumulated])
-        unique_class_names = np.unique([el['class_str'] for el in accumulated])
-        print(f'#unique_class_ids: {self._split}, {len(unique_class_ids)}')
-        print(f'#unique_class_names: {unique_class_names[:8]}, {len(unique_class_names)}')
+                dict1["class_id"] = unique_class_ids.index(dict1["class_id"])
+                dict1["class_str"] = str(unique_class_names.index(dict1["class_str"]))
+
+        unique_class_ids = np.unique([el["class_id"] for el in accumulated])
+        unique_class_names = np.unique([el["class_str"] for el in accumulated])
+        print(f"#unique_class_ids: {self._split}, {len(unique_class_ids)}")
+        print(f"#unique_class_names: {unique_class_names[:8]}, {len(unique_class_names)}")
 
         self._entries = accumulated
         self._class_ids = class_ids
