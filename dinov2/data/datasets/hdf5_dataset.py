@@ -91,8 +91,7 @@ class HDF5Dataset(ImageNet):
             # Add the HDF5 file name to each entry and accumulate the file entries
             for entry in file_index["files"]:
                 entry["hdf5_file"] = hdf5_file  # Add the HDF5 file name to the entry
-                class_entry = {"class_id": entry["class_id"], "class_str": entry["class_str"]}
-                accumulated.append(class_entry)
+                accumulated.append(entry)
                 class_id = entry["class_id"]
                 class_str = entry["class_str"]
                 if class_id not in class_ids:
