@@ -6,7 +6,7 @@
 import logging
 
 from kornia import augmentation
-from torchvision import transforms
+from torchvision.transforms import v2
 from kornia.constants import Resample
 from kornia.augmentation.container import AugmentationSequential
 
@@ -98,38 +98,38 @@ class DataAugmentationDINO(object):
         ########
         else:
             # random resized crop and flip
-            self.geometric_augmentation_global = transforms.Compose(
+            self.geometric_augmentation_global = v2.Compose(
                 [
-                    transforms.RandomResizedCrop(
+                    v2.RandomResizedCrop(
                         global_crops_size,
                         scale=global_crops_scale,
-                        interpolation=transforms.InterpolationMode.BICUBIC,
+                        interpolation=v2.InterpolationMode.BICUBIC,
                         antialias=True,
                     ),
-                    transforms.RandomHorizontalFlip(p=0.5),
+                    v2.RandomHorizontalFlip(p=0.5),
                 ]
             )
 
-            self.geometric_augmentation_local = transforms.Compose(
+            self.geometric_augmentation_local = v2.Compose(
                 [
-                    transforms.RandomResizedCrop(
+                    v2.RandomResizedCrop(
                         local_crops_size,
                         scale=local_crops_scale,
-                        interpolation=transforms.InterpolationMode.BICUBIC,
+                        interpolation=v2.InterpolationMode.BICUBIC,
                         antialias=True,
                     ),
-                    transforms.RandomHorizontalFlip(p=0.5),
+                    v2.RandomHorizontalFlip(p=0.5),
                 ]
             )
 
             # color distorsions / blurring
-            color_jittering = transforms.Compose(
+            color_jittering = v2.Compose(
                 [
-                    transforms.RandomApply(
-                        [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+                    v2.RandomApply(
+                        [v2.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
                         p=0.8,
                     ),
-                    transforms.RandomGrayscale(p=0.2),
+                    v2.RandomGrayscale(p=0.2),
                 ]
             )
 
@@ -139,10 +139,10 @@ class DataAugmentationDINO(object):
                 solarize_threshold = 0.5
             else:
                 solarize_threshold = 128
-            global_transfo2_extra = transforms.Compose(
+            global_transfo2_extra = v2.Compose(
                 [
                     GaussianBlur(p=0.1),
-                    transforms.RandomSolarize(threshold=solarize_threshold, p=0.2),
+                    v2.RandomSolarize(threshold=solarize_threshold, p=0.2),
                 ]
             )
 
@@ -150,18 +150,18 @@ class DataAugmentationDINO(object):
 
             # normalization
             if not self.do_transform_on_gpu:  # if this is done on cpu, we have PIL Image, so to tensor
-                self.normalize = transforms.Compose(
+                self.normalize = v2.Compose(
                     [
-                        transforms.ToTensor(),
+                        v2.ToTensor(),
                         make_normalize_transform(),
                     ]
                 )
             else:  # if on gpu, the images are already tensors
                 self.normalize = make_normalize_transform()
 
-            self.global_transfo1 = transforms.Compose([color_jittering, global_transfo1_extra, self.normalize])
-            self.global_transfo2 = transforms.Compose([color_jittering, global_transfo2_extra, self.normalize])
-            self.local_transfo = transforms.Compose([color_jittering, local_transfo_extra, self.normalize])
+            self.global_transfo1 = v2.Compose([color_jittering, global_transfo1_extra, self.normalize])
+            self.global_transfo2 = v2.Compose([color_jittering, global_transfo2_extra, self.normalize])
+            self.local_transfo = v2.Compose([color_jittering, local_transfo_extra, self.normalize])
 
     def __call__(self, image):
         output = {}

@@ -15,7 +15,7 @@ import random
 
 from fvcore.common.checkpoint import PeriodicCheckpointer
 import torch
-import torchvision
+from torchvision.transforms import v2
 
 from datetime import datetime
 
@@ -130,7 +130,7 @@ def select_augmentations(cfg):
         )
         data_transform_gpu = None
     elif cfg.train.augmentations == AugmentationType.TORCHV_GPU.value:
-        data_transform_cpu = torchvision.transforms.ToTensor()
+        data_transform_cpu = v2.ToTensor()
         data_transform_gpu = DataAugmentationDINO(
             cfg.crops.global_crops_scale,
             cfg.crops.local_crops_scale,
@@ -140,7 +140,7 @@ def select_augmentations(cfg):
             do_transform_on_gpu=True,
         )
     elif cfg.train.augmentations == AugmentationType.KORNIA_GPU.value:
-        data_transform_cpu = torchvision.transforms.ToTensor()
+        data_transform_cpu = v2.ToTensor()
         data_transform_gpu = DataAugmentationDINO(
             cfg.crops.global_crops_scale,
             cfg.crops.local_crops_scale,
@@ -183,6 +183,10 @@ def do_test(cfg, model, iteration):
 
 def do_train(cfg, model, resume=False):
     model.train()
+    if cfg.train.use_torch_compile:
+        print("--- COMPILING TORCH MODULE ---")
+        model = torch.compile(model=model)
+
     inputs_dtype = torch.half
     fp16_scaler = model.fp16_scaler  # for mixed precision training
 
