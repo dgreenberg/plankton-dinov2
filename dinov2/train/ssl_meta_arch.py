@@ -136,12 +136,12 @@ class SSLMetaArch(nn.Module):
 
     def forward_backward(self, images, teacher_temp):
         n_global_crops = 2
-        assert n_global_crops == 2
         n_local_crops = self.cfg.crops.local_crops_number
 
         if not images["collated_global_crops"].is_cuda:
             global_crops = images["collated_global_crops"].cuda(non_blocking=True)
             local_crops = images["collated_local_crops"].cuda(non_blocking=True)
+            global_crops_teacher = images["collated_global_crops_teacher"].cuda(non_blocking=True)
 
             masks = images["collated_masks"].cuda(non_blocking=True)
             mask_indices_list = images["mask_indices_list"].cuda(non_blocking=True)
@@ -151,6 +151,7 @@ class SSLMetaArch(nn.Module):
         else:
             global_crops = images["collated_global_crops"]
             local_crops = images["collated_local_crops"]
+            global_crops_teacher = images["collated_global_crops_teacher"]
 
             masks = images["collated_masks"]
             mask_indices_list = images["mask_indices_list"]
@@ -173,7 +174,7 @@ class SSLMetaArch(nn.Module):
         @torch.no_grad()
         def get_teacher_output():
             n_global_crops_teacher = n_global_crops
-            teacher_backbone_output_dict = self.teacher.backbone(global_crops, is_training=True)
+            teacher_backbone_output_dict = self.teacher.backbone(global_crops_teacher, is_training=True)
             teacher_cls_tokens = teacher_backbone_output_dict["x_norm_clstoken"]
             teacher_cls_tokens = teacher_cls_tokens.chunk(n_global_crops_teacher)
             # watch out: these are chunked and cat'd in reverse so A is matched to B in the global crops dino loss

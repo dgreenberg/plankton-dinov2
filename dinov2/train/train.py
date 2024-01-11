@@ -295,8 +295,8 @@ def do_train(cfg, model, resume=False):
         if data_transform_gpu is not None:
             # current_device_nb = model.student.backbone.device
             if isinstance(data, list):
-                data = data[0].to(device=f"cuda:{torch.cuda.current_device()}")
-
+                data = data[0]
+            data = data.to(device=f"cuda:{torch.cuda.current_device()}")
             data = data_transform_gpu(data)
             data = collate_fn(data)  # collate_fn collates crops and computes masks tensors
             # TODO: teacher crops are not used????
@@ -312,7 +312,6 @@ def do_train(cfg, model, resume=False):
             return
 
         # apply schedules
-
         lr = lr_schedule[iteration]
         wd = wd_schedule[iteration]
         mom = momentum_schedule[iteration]
@@ -321,12 +320,10 @@ def do_train(cfg, model, resume=False):
         apply_optim_scheduler(optimizer, lr, wd, last_layer_lr)
 
         # compute losses
-
         optimizer.zero_grad(set_to_none=True)
         loss_dict = model.forward_backward(data, teacher_temp=teacher_temp)
 
         # clip gradients
-
         if fp16_scaler is not None:
             if cfg.optim.clip_grad:
                 fp16_scaler.unscale_(optimizer)
@@ -341,11 +338,9 @@ def do_train(cfg, model, resume=False):
             optimizer.step()
 
         # perform teacher EMA update
-
         model.update_teacher(mom)
 
         # logging
-
         if distributed.get_global_size() > 1:
             for v in loss_dict.values():
                 torch.distributed.all_reduce(v)
