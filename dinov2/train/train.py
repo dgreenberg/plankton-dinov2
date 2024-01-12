@@ -17,6 +17,7 @@ from fvcore.common.checkpoint import PeriodicCheckpointer
 import torch
 from torchvision.transforms import v2
 import torchvision
+from torch.profiler import profile, record_function, ProfilerActivity
 
 from datetime import datetime
 
@@ -184,6 +185,7 @@ def do_test(cfg, model, iteration):
 
 def do_train(cfg, model, resume=False):
     torchvision.disable_beta_transforms_warning()
+    torch.backends.cudnn.benchmark = True
 
     model.train()
     if cfg.train.use_torch_compile:
@@ -288,100 +290,116 @@ def do_train(cfg, model, resume=False):
     metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file, verbose=distributed.is_main_process())
     header = "Training"
 
-    for data in metric_logger.log_every(
-        data_loader,
-        10,
-        header,
-        max_iter,
-        start_iter,
-    ):
-        if data_transform_gpu is not None:
-            # current_device_nb = model.student.backbone.device
-            if isinstance(data, list):
-                data = data[0]
-            data = data.to(device=f"cuda:{torch.cuda.current_device()}")
-            data = data_transform_gpu(data)
-            data = collate_fn(data)  # collate_fn collates crops and computes masks tensors
-            # TODO: teacher crops are not used????
+    do_profiling = False
+    if do_profiling:
+        activities = [ProfilerActivity.CPU]
+    else:
+        activities = None
+    with profile(activities=activities) as prof:
+        for data in metric_logger.log_every(
+            data_loader,
+            10,
+            header,
+            max_iter,
+            start_iter,
+        ):
+            if data_transform_gpu is not None:
+                # current_device_nb = model.student.backbone.device
+                if isinstance(data, list):
+                    data = data[0]
+                data = data.to(device=f"cuda:{torch.cuda.current_device()}")
+                data = data_transform_gpu(data)
+                data = collate_fn(data)  # collate_fn collates crops and computes masks tensors
+                # TODO: teacher crops are not used????
 
-            data = {
-                k: (v.to(device=f"cuda:{torch.cuda.current_device()}") if torch.is_tensor(v) and not v.is_cuda else v)
-                for k, v in data.items()
-            }
-
-        current_batch_size = data["collated_global_crops"].shape[0] / 2
-        tot_nb_seen_samples += current_batch_size * distributed.get_global_size()  # to get effective batch size
-        if iteration > max_iter:
-            return
-
-        # apply schedules
-        lr = lr_schedule[iteration]
-        wd = wd_schedule[iteration]
-        mom = momentum_schedule[iteration]
-        teacher_temp = teacher_temp_schedule[iteration]
-        last_layer_lr = last_layer_lr_schedule[iteration]
-        apply_optim_scheduler(optimizer, lr, wd, last_layer_lr)
-
-        # compute losses
-        optimizer.zero_grad(set_to_none=True)
-        loss_dict = model.forward_backward(data, teacher_temp=teacher_temp)
-
-        # clip gradients
-        if fp16_scaler is not None:
-            if cfg.optim.clip_grad:
-                fp16_scaler.unscale_(optimizer)
-                for v in model.student.values():
-                    v.clip_grad_norm_(cfg.optim.clip_grad)
-            fp16_scaler.step(optimizer)
-            fp16_scaler.update()
-        else:
-            if cfg.optim.clip_grad:
-                for v in model.student.values():
-                    v.clip_grad_norm_(cfg.optim.clip_grad)
-            optimizer.step()
-
-        # perform teacher EMA update
-        model.update_teacher(mom)
-
-        # logging
-        if distributed.get_global_size() > 1:
-            for v in loss_dict.values():
-                torch.distributed.all_reduce(v)
-        loss_dict_reduced = {k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()}
-
-        if math.isnan(sum(loss_dict_reduced.values())):
-            logger.info("NaN detected")
-            raise AssertionError
-        losses_reduced = sum(loss for loss in loss_dict_reduced.values())
-
-        metric_logger.update(lr=lr)
-        metric_logger.update(wd=wd)
-        metric_logger.update(mom=mom)
-        metric_logger.update(last_layer_lr=last_layer_lr)
-        metric_logger.update(current_batch_size=current_batch_size)
-        metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
-
-        if distributed.is_main_process():
-            wandb.log(
-                {
-                    "#samples": tot_nb_seen_samples,
-                    "lr": lr,
-                    "wd": wd,
-                    "mom": mom,
-                    "ll_lr": last_layer_lr,
-                    "total_loss": losses_reduced,
-                    **loss_dict_reduced,
+                data = {
+                    k: (
+                        v.to(device=f"cuda:{torch.cuda.current_device()}")
+                        if torch.is_tensor(v) and not v.is_cuda
+                        else v
+                    )
+                    for k, v in data.items()
                 }
-            )
 
-        # checkpointing and testing
+            current_batch_size = data["collated_global_crops"].shape[0] / 2
+            tot_nb_seen_samples += current_batch_size * distributed.get_global_size()  # to get effective batch size
+            if iteration > max_iter:
+                return
 
-        if cfg.evaluation.eval_period_iterations > 0 and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0:
-            do_test(cfg, model, f"training_{iteration}")
-            torch.cuda.synchronize()
-        periodic_checkpointer.step(iteration)
-        iteration = iteration + 1
-    metric_logger.synchronize_between_processes()
+            # apply schedules
+            lr = lr_schedule[iteration]
+            wd = wd_schedule[iteration]
+            mom = momentum_schedule[iteration]
+            teacher_temp = teacher_temp_schedule[iteration]
+            last_layer_lr = last_layer_lr_schedule[iteration]
+            apply_optim_scheduler(optimizer, lr, wd, last_layer_lr)
+
+            # compute losses
+            optimizer.zero_grad(set_to_none=True)
+            loss_dict = model.forward_backward(data, teacher_temp=teacher_temp)
+
+            # clip gradients
+            if fp16_scaler is not None:
+                if cfg.optim.clip_grad:
+                    fp16_scaler.unscale_(optimizer)
+                    for v in model.student.values():
+                        v.clip_grad_norm_(cfg.optim.clip_grad)
+                fp16_scaler.step(optimizer)
+                fp16_scaler.update()
+            else:
+                if cfg.optim.clip_grad:
+                    for v in model.student.values():
+                        v.clip_grad_norm_(cfg.optim.clip_grad)
+                optimizer.step()
+
+            # perform teacher EMA update
+            model.update_teacher(mom)
+
+            # logging
+            if distributed.get_global_size() > 1:
+                for v in loss_dict.values():
+                    torch.distributed.all_reduce(v)
+            loss_dict_reduced = {k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()}
+
+            if math.isnan(sum(loss_dict_reduced.values())):
+                logger.info("NaN detected")
+                raise AssertionError
+            losses_reduced = sum(loss for loss in loss_dict_reduced.values())
+
+            metric_logger.update(lr=lr)
+            metric_logger.update(wd=wd)
+            metric_logger.update(mom=mom)
+            metric_logger.update(last_layer_lr=last_layer_lr)
+            metric_logger.update(current_batch_size=current_batch_size)
+            metric_logger.update(total_loss=losses_reduced, **loss_dict_reduced)
+
+            if distributed.is_main_process():
+                wandb.log(
+                    {
+                        "#samples": tot_nb_seen_samples,
+                        "lr": lr,
+                        "wd": wd,
+                        "mom": mom,
+                        "ll_lr": last_layer_lr,
+                        "total_loss": losses_reduced,
+                        **loss_dict_reduced,
+                    }
+                )
+
+            # checkpointing and testing
+
+            if (
+                cfg.evaluation.eval_period_iterations > 0
+                and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
+            ):
+                do_test(cfg, model, f"training_{iteration}")
+                torch.cuda.synchronize()
+            periodic_checkpointer.step(iteration)
+            iteration = iteration + 1
+        metric_logger.synchronize_between_processes()
+
+    if do_profiling:
+        print(prof.key_averages().table(sort_by="cpu_time_total", row_limit=10))
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
 

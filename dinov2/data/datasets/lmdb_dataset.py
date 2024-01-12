@@ -51,7 +51,7 @@ class LMDBDataset(ImageNet):
         if not os.path.isdir(self.root):
             return extra_path
         else:
-            return self.root
+            return os.path.join(self.root, "*")
 
     def _get_entries(self) -> list:
         if self._entries is None:

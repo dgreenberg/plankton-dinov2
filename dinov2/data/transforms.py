@@ -54,14 +54,18 @@ class MaybeToTensor(v2.ToTensor):
 
 
 # Use timm's names
+# TODO: update means to our ds?
 IMAGENET_DEFAULT_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_DEFAULT_STD = (0.229, 0.224, 0.225)
+WHOI_DEFAULT_MEAN = (0.68622917, 0.68622917, 0.68622917)
+WHOI_DEFAULT_STD = (0.10176649, 0.10176649, 0.10176649)
 
 
 def make_normalize_transform(
     mean: Sequence[float] = IMAGENET_DEFAULT_MEAN,
     std: Sequence[float] = IMAGENET_DEFAULT_STD,
     use_kornia=False,
+    use_imagenet_means=True,
 ) -> Union[v2.Normalize, augmentation.Normalize]:
     if use_kornia:
         return augmentation.Normalize(mean, std, p=1.0, keepdim=False)
