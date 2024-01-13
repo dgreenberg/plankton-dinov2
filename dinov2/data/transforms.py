@@ -62,8 +62,8 @@ WHOI_DEFAULT_STD = (0.10176649, 0.10176649, 0.10176649)
 
 
 def make_normalize_transform(
-    mean: Sequence[float] = IMAGENET_DEFAULT_MEAN,
-    std: Sequence[float] = IMAGENET_DEFAULT_STD,
+    mean: Sequence[float] = WHOI_DEFAULT_MEAN,
+    std: Sequence[float] = WHOI_DEFAULT_STD,
     use_kornia=False,
     use_imagenet_means=True,
 ) -> Union[v2.Normalize, augmentation.Normalize]:
@@ -80,8 +80,8 @@ def make_classification_train_transform(
     crop_size: int = 224,
     interpolation=v2.InterpolationMode.BICUBIC,
     hflip_prob: float = 0.5,
-    mean: Sequence[float] = IMAGENET_DEFAULT_MEAN,
-    std: Sequence[float] = IMAGENET_DEFAULT_STD,
+    mean: Sequence[float] = WHOI_DEFAULT_MEAN,
+    std: Sequence[float] = WHOI_DEFAULT_STD,
 ):
     transforms_list = [v2.RandomResizedCrop(crop_size, interpolation=interpolation)]
     if hflip_prob > 0.0:
