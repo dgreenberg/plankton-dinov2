@@ -23,4 +23,5 @@ notebooks/dataloader_benchmark_results_10000_gpuTrue/time_vs_num_workers_worksta
 *.csv
 *.png
 logs/log.txt
-lin_run_12012024_232256_12012024_232257/logs/log.txt
+logs/*.txt
+logs/
