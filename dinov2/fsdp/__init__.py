@@ -96,7 +96,10 @@ class FSDPCheckpointer(Checkpointer):
 
         data = {}
         state_dict_type = StateDictType.FULL_STATE_DICT
-        fsdp_cfg = torch.distributed.fsdp.FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        if distributed.get_global_size() > 1:
+            fsdp_cfg = torch.distributed.fsdp.FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        else:
+            fsdp_cfg = None
         with FSDP.state_dict_type(self.model, state_dict_type, fsdp_cfg):
             data["model"] = self.model.state_dict()
 
