@@ -60,14 +60,16 @@ ibot:
   head_hidden_dim: 2048
 train:
   batch_size_per_gpu: 256
-  dataset_path: HDF5Dataset:split=TRAIN:root=/fast/AG_Kainmueller/plankton/data/WHOI/preprocessed_hdf5:extra=*
-  output_dir: 'home/jluesch/output_dir'
+  dataset_path: LMDBDataset:split=ALL:root=/fast/AG_Kainmueller/plankton/data/WHOI/preprocessed_hdf5/lmdb/:extra=*
+  output_dir: 'home/nkoreub/output_dir'
   saveckp_freq: 15
   seed: 0
   num_workers: 4
-  OFFICIAL_EPOCH_LENGTH: 1250
+  OFFICIAL_EPOCH_LENGTH: 2500
   cache_dataset: true
   centering: "sinkhorn_knopp" # or "centering"
+  augmentations: "kornia_gpu"
+use_torch_compile: true
 student:
   arch: vit_small
   patch_size: 14
