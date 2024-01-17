@@ -58,6 +58,7 @@ def main(args):
                     img_bytes = file[entry["path"]][()]
                     txn_imgs.put(str(entry["index"]).encode("utf-8"), img_bytes)
                     txn_labels.put(str(entry["index"]).encode("utf-8"), str(entry["class_id"]).encode("utf-8"))
+
         env_imgs.close()
         env_labels.close()
         print(f"FINISHED {lmdb_imgs_path}")

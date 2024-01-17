@@ -21,11 +21,13 @@ from torch.profiler import profile, record_function, ProfilerActivity
 
 from datetime import datetime
 
+from datetime import datetime
+
 from dinov2.data import SamplerType, make_data_loader, make_dataset
 from dinov2.data import collate_data_and_cast, DataAugmentationDINO, MaskingGenerator
 import dinov2.distributed as distributed
 from dinov2.fsdp import FSDPCheckpointer
-from dinov2.logging import MetricLogger
+from dinov2.logging import MetricLogger, setup_logging
 from dinov2.utils.config import setup
 from dinov2.utils.utils import CosineScheduler
 
@@ -309,7 +311,6 @@ def do_train(cfg, model, resume=False):
             data = data.to(device=f"cuda:{torch.cuda.current_device()}")
             data = data_transform_gpu(data)
             data = collate_fn(data)  # collate_fn collates crops and computes masks tensors
-            # TODO: teacher crops are not used????
 
             data = {
                 k: (v.to(device=f"cuda:{torch.cuda.current_device()}") if torch.is_tensor(v) and not v.is_cuda else v)
@@ -386,6 +387,7 @@ def do_train(cfg, model, resume=False):
         if cfg.evaluation.eval_period_iterations > 0 and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0:
             do_test(cfg, model, f"training_{iteration}")
             torch.cuda.synchronize()
+
         periodic_checkpointer.step(iteration)
         iteration = iteration + 1
     metric_logger.synchronize_between_processes()

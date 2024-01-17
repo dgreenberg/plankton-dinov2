@@ -95,13 +95,14 @@ class FSDPCheckpointer(Checkpointer):
             return
 
         data = {}
-        state_dict_type = StateDictType.LOCAL_STATE_DICT if distributed.get_global_size() > 1 else StateDictType.FULL_STATE_DICT
-        with FSDP.state_dict_type(self.model, state_dict_type):
-            state_dict_cpu = {k: v.cpu() for k,v in self.model.state_dict().items()}
-            data["model"] = state_dict_cpu
+        state_dict_type = StateDictType.FULL_STATE_DICT
+        fsdp_cfg = torch.distributed.fsdp.FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+        with FSDP.state_dict_type(self.model, state_dict_type, fsdp_cfg):
+            data["model"] = self.model.state_dict()
 
         for key, obj in self.checkpointables.items():
             data[key] = obj.state_dict()
+
         data.update(kwargs)
 
         basename = f"{name}.{rankstr()}.pth"
@@ -109,6 +110,7 @@ class FSDPCheckpointer(Checkpointer):
         assert os.path.basename(save_file) == basename, basename
         self.logger.info("Saving checkpoint to {}".format(save_file))
         with self.path_manager.open(save_file, "wb") as f:
+            print("Saving data with keys: ", data.keys(), flush=True)
             torch.save(data, f)
         self.tag_last_checkpoint(basename)
 
