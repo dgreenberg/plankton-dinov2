@@ -16,6 +16,15 @@ dependencies:
   - iopath
   - xformers::xformers=0.0.18
   - pip
+  - lmdb
+  - wandb
+  - h5py
+  - matplotlib
+  - seaborn
+  - hdf5
+  - jupyterlab
+  - git
+  - kornia
   - pip:
     - git+https://github.com/facebookincubator/submitit
     - --extra-index-url https://pypi.nvidia.com

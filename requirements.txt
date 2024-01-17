@@ -9,3 +9,12 @@ xformers==0.0.18
 submitit
 --extra-index-url https://pypi.nvidia.com
 cuml-cu11
+wandb
+lmdb
+h5py
+matplotlib
+seaborn
+hdf5
+jupyterlab
+git
+kornia
