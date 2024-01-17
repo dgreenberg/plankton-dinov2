@@ -23,6 +23,7 @@ def _configure_logger(
     *,
     level: int = logging.DEBUG,
     output: Optional[str] = None,
+    disable_prefix: bool = True,
 ):
     """
     Configure a logger.
@@ -50,7 +51,11 @@ def _configure_logger(
     #   [IWEF]yyyymmdd hh:mm:ss logger threadid file:line] msg
     fmt_prefix = "%(levelname).1s%(asctime)s %(process)s %(name)s %(filename)s:%(lineno)s] "
     fmt_message = "%(message)s"
-    fmt = fmt_prefix + fmt_message
+    if not disable_prefix:
+        fmt = fmt_prefix + fmt_message
+    else:
+        fmt = ""
+
     datefmt = "%Y%m%d %H:%M:%S"
     formatter = logging.Formatter(fmt=fmt, datefmt=datefmt)
 
@@ -88,6 +93,7 @@ def setup_logging(
     level: int = logging.DEBUG,
     capture_warnings: bool = True,
     args: Optional[dict] = None,
+    do_eval: bool = False,
 ) -> None:
     """
     Setup logging.
@@ -104,8 +110,10 @@ def setup_logging(
     if distributed.is_main_process():
         logging.captureWarnings(capture_warnings)
         _configure_logger(name, level=level, output=output)
-        if args is not None:
-            run_name = args.run_name
+
+        if do_eval:
+            project = "dinov2_plankton_eval"
         else:
-            run_name = None
-        wandb.init(name=run_name, project='dinov2_plankton', config=args, dir=output)
+            project = "dinov2_plankton"
+
+        wandb.init(name=args.run_name, entity="kainmueller-lab", project=project, config=args, dir=output)

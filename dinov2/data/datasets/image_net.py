@@ -7,7 +7,7 @@ import csv
 from enum import Enum
 import logging
 import os
-from typing import Callable, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple
 
 import numpy as np
 
@@ -22,9 +22,10 @@ class _Split(Enum):
     TRAIN = "train"
     VAL = "val"
     TEST = "test"  # NOTE: torchvision does not support the test split
+    ALL = "all"
 
     @property
-    def length(self) -> int:
+    def length(self) -> int:  # TODO remove hardcoded len
         split_lengths = {
             _Split.TRAIN: 1_281_167,
             _Split.VAL: 50_000,
@@ -53,8 +54,8 @@ class _Split(Enum):
 
 
 class ImageNet(ExtendedVisionDataset):
-    Target = Union[_Target]
-    Split = Union[_Split]
+    Target = _Target
+    Split = _Split
 
     def __init__(
         self,
@@ -65,6 +66,7 @@ class ImageNet(ExtendedVisionDataset):
         transforms: Optional[Callable] = None,
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
+        do_short_run: bool = False,
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
         self._extra_root = extra
@@ -73,6 +75,8 @@ class ImageNet(ExtendedVisionDataset):
         self._entries = None
         self._class_ids = None
         self._class_names = None
+
+        self.do_short_run = do_short_run
 
     @property
     def split(self) -> "ImageNet.Split":

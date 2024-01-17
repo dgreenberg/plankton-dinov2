@@ -8,6 +8,7 @@ from typing import Any, List, Optional, Tuple
 
 import torch
 import torch.backends.cudnn as cudnn
+from dinov2.distributed import _restrict_print_to_main_process
 
 from dinov2.models import build_model_from_cfg
 from dinov2.utils.config import setup
@@ -72,4 +73,5 @@ def setup_and_build_model(args) -> Tuple[Any, torch.dtype]:
     config = setup(args)
     model = build_model_for_eval(config, args.pretrained_weights)
     autocast_dtype = get_autocast_dtype(config)
+    _restrict_print_to_main_process
     return model, autocast_dtype

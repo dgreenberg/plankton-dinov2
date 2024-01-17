@@ -45,7 +45,12 @@ class SSLMetaArch(nn.Module):
         if cfg.student.pretrained_weights:
             chkpt = torch.load(cfg.student.pretrained_weights)
             logger.info(f"OPTIONS -- pretrained weights: loading from {cfg.student.pretrained_weights}")
-            student_backbone.load_state_dict(chkpt["model"], strict=False)
+            if "model" in chkpt.keys():
+                model_params = chkpt["model"]
+            else:
+                model_params = chkpt
+
+            student_backbone.load_state_dict(model_params, strict=False)
 
         self.embed_dim = embed_dim
         self.dino_out_dim = cfg.dino.head_n_prototypes
@@ -131,18 +136,30 @@ class SSLMetaArch(nn.Module):
 
     def forward_backward(self, images, teacher_temp):
         n_global_crops = 2
-        assert n_global_crops == 2
         n_local_crops = self.cfg.crops.local_crops_number
 
-        global_crops = images["collated_global_crops"].cuda(non_blocking=True)
-        local_crops = images["collated_local_crops"].cuda(non_blocking=True)
+        if not images["collated_global_crops"].is_cuda:
+            global_crops = images["collated_global_crops"].cuda(non_blocking=True)
+            local_crops = images["collated_local_crops"].cuda(non_blocking=True)
+            global_crops_teacher = images["collated_global_crops_teacher"].cuda(non_blocking=True)
 
-        masks = images["collated_masks"].cuda(non_blocking=True)
-        mask_indices_list = images["mask_indices_list"].cuda(non_blocking=True)
-        n_masked_patches_tensor = images["n_masked_patches"].cuda(non_blocking=True)
+            masks = images["collated_masks"].cuda(non_blocking=True)
+            mask_indices_list = images["mask_indices_list"].cuda(non_blocking=True)
+            n_masked_patches_tensor = images["n_masked_patches"].cuda(non_blocking=True)
+            masks_weight = images["masks_weight"].cuda(non_blocking=True)
+
+        else:
+            global_crops = images["collated_global_crops"]
+            local_crops = images["collated_local_crops"]
+            global_crops_teacher = images["collated_global_crops_teacher"]
+
+            masks = images["collated_masks"]
+            mask_indices_list = images["mask_indices_list"]
+            n_masked_patches_tensor = images["n_masked_patches"]
+            masks_weight = images["masks_weight"]
+
         n_masked_patches = mask_indices_list.shape[0]
         upperbound = images["upperbound"]
-        masks_weight = images["masks_weight"].cuda(non_blocking=True)
 
         n_local_crops_loss_terms = max(n_local_crops * n_global_crops, 1)
         n_global_crops_loss_terms = (n_global_crops - 1) * n_global_crops
@@ -156,8 +173,8 @@ class SSLMetaArch(nn.Module):
         # teacher output
         @torch.no_grad()
         def get_teacher_output():
-            x, n_global_crops_teacher = global_crops, n_global_crops
-            teacher_backbone_output_dict = self.teacher.backbone(x, is_training=True)
+            n_global_crops_teacher = n_global_crops
+            teacher_backbone_output_dict = self.teacher.backbone(global_crops_teacher, is_training=True)
             teacher_cls_tokens = teacher_backbone_output_dict["x_norm_clstoken"]
             teacher_cls_tokens = teacher_cls_tokens.chunk(n_global_crops_teacher)
             # watch out: these are chunked and cat'd in reverse so A is matched to B in the global crops dino loss

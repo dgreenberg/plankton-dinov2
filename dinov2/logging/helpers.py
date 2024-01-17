@@ -41,6 +41,17 @@ class MetricLogger(object):
     def __str__(self):
         loss_str = []
         for name, meter in self.meters.items():
+            if 'batch_size' in name:
+                meter = int(meter.deque[-1])
+                name = 'b_s'
+            if name.endswith('crops_loss'):
+                name = name[:-(len('crops_loss')+1)]
+            elif name.endswith('loss'):
+                name = name[:-(len('loss')+1)]
+
+            if 'last_layer_lr' in name:
+                name = 'll_lr'
+
             loss_str.append("{}: {}".format(name, str(meter)))
         return self.delimiter.join(loss_str)
 
@@ -87,7 +98,7 @@ class MetricLogger(object):
             "data: {data}",
         ]
         if torch.cuda.is_available():
-            log_list += ["max mem: {memory:.0f}"]
+            log_list += ["max mem: {memory:.0f} (mb)"]
 
         log_msg = self.delimiter.join(log_list)
         MB = 1024.0 * 1024.0
@@ -130,7 +141,11 @@ class MetricLogger(object):
         total_time = time.time() - start_time
         total_time_str = str(datetime.timedelta(seconds=int(total_time)))
         if self.verbose:
-            logger.info("{} Total time: {} ({:.6f} s / it)".format(header, total_time_str, total_time / n_iterations))
+            if n_iterations == 0:
+                time_per_it = 0
+            else:
+                time_per_it = total_time / n_iterations
+            logger.info("{} Total time: {} ({:.6f} s / it)".format(header, total_time_str, time_per_it))
 
 
 class SmoothedValue:

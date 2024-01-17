@@ -3,6 +3,7 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
+from datetime import datetime
 import math
 import logging
 import os
@@ -38,15 +39,14 @@ def write_config(cfg, output_dir, name="config.yaml"):
 
 
 def get_cfg_from_args(args):
-    args.output_dir = os.path.abspath(args.output_dir)
-    args.opts += [f"train.output_dir={args.output_dir}"]
+    # args.opts += [f"train.output_dir={args.output_dir}"]
     default_cfg = OmegaConf.create(dinov2_default_config)
     cfg = OmegaConf.load(args.config_file)
     cfg = OmegaConf.merge(default_cfg, cfg, OmegaConf.from_cli(args.opts))
     return cfg
 
 
-def default_setup(args):
+def default_setup(args, output_dir):
     distributed.enable(overwrite=True)
     seed = getattr(args, "seed", 0)
     rank = distributed.get_global_rank()
@@ -54,7 +54,7 @@ def default_setup(args):
     global logger
 
     if distributed.is_main_process():
-        setup_logging(args=args, output=args.output_dir, level=logging.INFO)
+        setup_logging(args=args, output=output_dir, level=logging.INFO)
 
     logger = logging.getLogger("dinov2")
 
@@ -67,9 +67,16 @@ def setup(args):
     """
     Create configs and perform basic setups.
     """
+
+    args.run_name = args.run_name + f"_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
+    # args.output_dir = os.path.join(args.output_dir, args.run_name)
+
     cfg = get_cfg_from_args(args)
-    os.makedirs(args.output_dir, exist_ok=True)
-    default_setup(args)
+    cfg.train.output_dir = os.path.join(cfg.train.output_dir, args.run_name)
+
+    os.makedirs(cfg.train.output_dir, exist_ok=True)
+    default_setup(args, output_dir=cfg.train.output_dir)
     apply_scaling_rules_to_cfg(cfg)
-    write_config(cfg, args.output_dir)
+    if distributed.is_main_process():
+        write_config(cfg, cfg.train.output_dir)
     return cfg

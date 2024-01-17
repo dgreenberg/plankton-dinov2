@@ -7,15 +7,27 @@ import torch
 import random
 
 
-def collate_data_and_cast(samples_list, mask_ratio_tuple, mask_probability, dtype, n_tokens=None, mask_generator=None):
+def collate_data_and_cast(samples, mask_ratio_tuple, mask_probability, dtype, n_tokens=None, mask_generator=None):
     # dtype = torch.half  # TODO: Remove
 
-    n_global_crops = len(samples_list[0][0]["global_crops"])
-    n_local_crops = len(samples_list[0][0]["local_crops"])
+    # samples dict_keys(['global_crops', 'global_crops_teacher', 'local_crops', 'offsets'])
+    # TODO: use global_crops_teacher in returned dict
+    # from (nb_crops, b, c, h, w) to (nb_crops * b, c, h, w)
+    if isinstance(samples, dict):  # on gpu
+        collated_global_crops = torch.cat(samples["global_crops"], dim=0)
+        collated_local_crops = torch.cat(samples["local_crops"], dim=0)
+        collated_global_crops_teacher = torch.cat(samples["global_crops_teacher"], dim=0)
 
-    collated_global_crops = torch.stack([s[0]["global_crops"][i] for i in range(n_global_crops) for s in samples_list])
+    else:  # on cpu
+        n_global_crops = len(samples[0][0]["global_crops"])
+        n_local_crops = len(samples[0][0]["local_crops"])
+        n_local_crops_teacher = len(samples[0][0]["local_crops"])
 
-    collated_local_crops = torch.stack([s[0]["local_crops"][i] for i in range(n_local_crops) for s in samples_list])
+        collated_global_crops = torch.stack([s[0]["global_crops"][i] for i in range(n_global_crops) for s in samples])
+        collated_local_crops = torch.stack([s[0]["local_crops"][i] for i in range(n_local_crops) for s in samples])
+        collated_global_crops_teacher = torch.stack(
+            [s[0]["global_crops_teacher"][i] for i in range(n_local_crops_teacher) for s in samples]
+        )
 
     B = len(collated_global_crops)
     N = n_tokens
@@ -41,6 +53,7 @@ def collate_data_and_cast(samples_list, mask_ratio_tuple, mask_probability, dtyp
     return {
         "collated_global_crops": collated_global_crops.to(dtype),
         "collated_local_crops": collated_local_crops.to(dtype),
+        "collated_global_crops_teacher": collated_global_crops_teacher.to(dtype),
         "collated_masks": collated_masks,
         "mask_indices_list": mask_indices_list,
         "masks_weight": masks_weight,

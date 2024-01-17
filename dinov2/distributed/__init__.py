@@ -35,7 +35,6 @@ def get_global_rank() -> int:
     Returns:
         The rank of the current process within the global process group.
     """
-    #print('get_global_rank', RANK, dist.is_available() , dist.is_initialized())
     return RANK if is_enabled() else 0
 
 
@@ -140,12 +139,10 @@ class _TorchDistributedEnvironment:
         dist.barrier()
 
         global RANK, WORLD_SIZE, LOCAL_RANK, LOCAL_WORLD_SIZE
-        print('torch.cuda.device_count()', torch.cuda.device_count())
-        print('torch.distributed.get_rank(group=None)', dist.get_rank(group=None))
-        print('torch.distributed.get_world_size(group=None)', dist.get_world_size(group=None))
         RANK = dist.get_rank(group=None)
         WORLD_SIZE = dist.get_world_size(group=None)
-        LOCAL_WORLD_SIZE = torch.cuda.device_count()
+        # LOCAL_WORLD_SIZE = torch.cuda.device_count() # does not work bc detects all gpus on node
+        LOCAL_WORLD_SIZE = dist.get_world_size() # TODO test this for multi node
         LOCAL_RANK = RANK % LOCAL_WORLD_SIZE
         # or if num nodes in env vars
         # LOCAL_WORLD_SIZE = WORLD_SIZE // node_count

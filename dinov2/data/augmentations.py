@@ -5,10 +5,14 @@
 
 import logging
 
-from torchvision import transforms
+from kornia import augmentation
+from torchvision.transforms import v2
+from kornia.constants import Resample
+from kornia.augmentation.container import AugmentationSequential
 
 from .transforms import (
     GaussianBlur,
+    KorniaGaussianBlur,
     make_normalize_transform,
 )
 
@@ -24,12 +28,16 @@ class DataAugmentationDINO(object):
         local_crops_number,
         global_crops_size=224,
         local_crops_size=96,
+        do_transform_on_gpu=False,
+        use_kornia=False,
     ):
         self.global_crops_scale = global_crops_scale
         self.local_crops_scale = local_crops_scale
         self.local_crops_number = local_crops_number
         self.global_crops_size = global_crops_size
         self.local_crops_size = local_crops_size
+        self.do_transform_on_gpu = do_transform_on_gpu
+        self.use_kornia = use_kornia
 
         logger.info("###################################")
         logger.info("Using data augmentation parameters:")
@@ -40,58 +48,120 @@ class DataAugmentationDINO(object):
         logger.info(f"local_crops_size: {local_crops_size}")
         logger.info("###################################")
 
-        # random resized crop and flip
-        self.geometric_augmentation_global = transforms.Compose(
-            [
-                transforms.RandomResizedCrop(
-                    global_crops_size, scale=global_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC
+        ######## Kornia
+        if self.use_kornia and self.do_transform_on_gpu:
+            global_crops_size = (global_crops_size, global_crops_size)
+            local_crops_size = (local_crops_size, local_crops_size)
+            self.geometric_augmentation_global = AugmentationSequential(
+                augmentation.RandomResizedCrop(
+                    global_crops_size,
+                    scale=global_crops_scale,
+                    resample=Resample.BICUBIC.name,
+                    same_on_batch=False,
                 ),
-                transforms.RandomHorizontalFlip(p=0.5),
-            ]
-        )
-
-        self.geometric_augmentation_local = transforms.Compose(
-            [
-                transforms.RandomResizedCrop(
-                    local_crops_size, scale=local_crops_scale, interpolation=transforms.InterpolationMode.BICUBIC
+                augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
+            )
+            self.geometric_augmentation_local = AugmentationSequential(
+                augmentation.RandomResizedCrop(
+                    local_crops_size,
+                    scale=local_crops_scale,
+                    resample=Resample.BICUBIC.name,
+                    same_on_batch=False,
                 ),
-                transforms.RandomHorizontalFlip(p=0.5),
-            ]
-        )
+                augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
+            )
 
-        # color distorsions / blurring
-        color_jittering = transforms.Compose(
-            [
-                transforms.RandomApply(
-                    [transforms.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
-                    p=0.8,
+            # color distorsions / blurring
+            color_jittering = AugmentationSequential(
+                augmentation.ColorJitter(
+                    brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1, same_on_batch=False, p=0.8
                 ),
-                transforms.RandomGrayscale(p=0.2),
-            ]
-        )
+                augmentation.RandomGrayscale(p=0.2),
+            )
 
-        global_transfo1_extra = GaussianBlur(p=1.0)
+            global_transfo1_extra = KorniaGaussianBlur(p=1.0)
 
-        global_transfo2_extra = transforms.Compose(
-            [
-                GaussianBlur(p=0.1),
-                transforms.RandomSolarize(threshold=128, p=0.2),
-            ]
-        )
+            global_transfo2_extra = AugmentationSequential(
+                KorniaGaussianBlur(p=0.1),
+                augmentation.RandomSolarize(thresholds=0.5, additions=0.1, same_on_batch=False, p=0.2),
+            )
 
-        local_transfo_extra = GaussianBlur(p=0.5)
+            local_transfo_extra = KorniaGaussianBlur(p=1.0)
 
-        # normalization
-        self.normalize = transforms.Compose(
-            [
-                transforms.ToTensor(),
-                make_normalize_transform(),
-            ]
-        )
+            # normalization
+            self.normalize = make_normalize_transform(use_kornia=True)
 
-        self.global_transfo1 = transforms.Compose([color_jittering, global_transfo1_extra, self.normalize])
-        self.global_transfo2 = transforms.Compose([color_jittering, global_transfo2_extra, self.normalize])
-        self.local_transfo = transforms.Compose([color_jittering, local_transfo_extra, self.normalize])
+            self.global_transfo1 = AugmentationSequential(color_jittering, global_transfo1_extra, self.normalize)
+            self.global_transfo2 = AugmentationSequential(color_jittering, global_transfo2_extra, self.normalize)
+            self.local_transfo = AugmentationSequential(color_jittering, local_transfo_extra, self.normalize)
+
+        ########
+        else:
+            # random resized crop and flip
+            self.geometric_augmentation_global = v2.Compose(
+                [
+                    v2.RandomResizedCrop(
+                        global_crops_size,
+                        scale=global_crops_scale,
+                        interpolation=v2.InterpolationMode.BICUBIC,
+                        antialias=True,
+                    ),
+                    v2.RandomHorizontalFlip(p=0.5),
+                ]
+            )
+
+            self.geometric_augmentation_local = v2.Compose(
+                [
+                    v2.RandomResizedCrop(
+                        local_crops_size,
+                        scale=local_crops_scale,
+                        interpolation=v2.InterpolationMode.BICUBIC,
+                        antialias=True,
+                    ),
+                    v2.RandomHorizontalFlip(p=0.5),
+                ]
+            )
+
+            # color distorsions / blurring
+            color_jittering = v2.Compose(
+                [
+                    v2.RandomApply(
+                        [v2.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+                        p=0.8,
+                    ),
+                    v2.RandomGrayscale(p=0.2),
+                ]
+            )
+
+            global_transfo1_extra = GaussianBlur(p=1.0)
+
+            if self.do_transform_on_gpu:
+                solarize_threshold = 0.5
+            else:
+                solarize_threshold = 128
+            global_transfo2_extra = v2.Compose(
+                [
+                    GaussianBlur(p=0.1),
+                    v2.RandomSolarize(threshold=solarize_threshold, p=0.2),
+                ]
+            )
+
+            local_transfo_extra = GaussianBlur(p=0.5)
+
+            # normalization
+            if not self.do_transform_on_gpu:  # if this is done on cpu, we have PIL Image, so to tensor
+                self.normalize = v2.Compose(
+                    [
+                        v2.ToTensor(),
+                        make_normalize_transform(),
+                    ]
+                )
+            else:  # if on gpu, the images are already tensors
+                self.normalize = make_normalize_transform()
+
+            self.global_transfo1 = v2.Compose([color_jittering, global_transfo1_extra, self.normalize])
+            self.global_transfo2 = v2.Compose([color_jittering, global_transfo2_extra, self.normalize])
+            self.local_transfo = v2.Compose([color_jittering, local_transfo_extra, self.normalize])
 
     def __call__(self, image):
         output = {}

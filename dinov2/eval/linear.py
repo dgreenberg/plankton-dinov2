@@ -45,6 +45,12 @@ def get_args_parser(
         add_help=add_help,
     )
     parser.add_argument(
+        "--run_name",
+        type=str,
+        help="Name for the wandb log",
+        default=f"lin_run_{datetime.now().strftime('%d%m%Y_%H%M%S')}",
+    )
+    parser.add_argument(
         "--train-dataset",
         dest="train_dataset_str",
         type=str,
@@ -497,6 +503,7 @@ def run_eval_linear(
         dataset_str=train_dataset_str,
         transform=train_transform,
     )
+    print(train_dataset.get_targets())
     training_num_classes = len(torch.unique(torch.Tensor(train_dataset.get_targets().astype(int))))
     sampler_type = SamplerType.SHARDED_INFINITE
     # sampler_type = SamplerType.INFINITE

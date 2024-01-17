@@ -14,6 +14,7 @@ from typing import List, Optional
 import torch
 from torch.nn.functional import one_hot, softmax
 
+from datetime import datetime
 import dinov2.distributed as distributed
 from dinov2.data import SamplerType, make_data_loader, make_dataset
 from dinov2.data.transforms import make_classification_eval_transform
@@ -74,6 +75,12 @@ def get_args_parser(
         help="Batch size.",
     )
     parser.add_argument(
+        "--num-workers",
+        type=int,
+        default=4,
+        help="Number of workers in DataLoader.",
+    )
+    parser.add_argument(
         "--n-per-class-list",
         nargs="+",
         type=int,
@@ -83,6 +90,12 @@ def get_args_parser(
         "--n-tries",
         type=int,
         help="Number of tries",
+    )
+    parser.add_argument(
+        "--run_name",
+        type=str,
+        help="Name for the wandb log",
+        default=f"knn_run_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
@@ -272,7 +285,8 @@ def eval_knn(
         shuffle=False,
         persistent_workers=True,
     )
-    num_classes = train_labels.max() + 1
+    num_classes = int(train_labels.max() + 1)
+    print('Train num_classes', num_classes)
     metric_collection = build_topk_accuracy_metric(accuracy_averaging, num_classes=num_classes)
 
     device = torch.cuda.current_device()
@@ -360,11 +374,13 @@ def eval_knn_with_model(
     results_dict = {}
     if distributed.is_main_process():
         for knn_ in results_dict_knn.keys():
-            top1 = results_dict_knn[knn_]["top-1"].item() * 100.0
-            top5 = results_dict_knn[knn_]["top-5"].item() * 100.0
-            results_dict[f"{knn_} Top 1"] = top1
-            results_dict[f"{knn_} Top 5"] = top5
-            logger.info(f"{knn_} classifier result: Top1: {top1:.2f} Top5: {top5:.2f}")
+            metric_log_msg = f"KNN {knn_[1]} classifier result: "
+            for metric_name in results_dict_knn[knn_].keys():
+                metric_val = results_dict_knn[knn_][metric_name].item()
+                results_dict[f"{knn_} {metric_name}"] = metric_val
+
+                metric_log_msg += f'{metric_name}: {metric_val:.4f} '
+            logger.info(metric_log_msg)
 
     metrics_file_path = os.path.join(output_dir, "results_eval_knn.json")
     with open(metrics_file_path, "a") as f:
@@ -390,7 +406,7 @@ def main(args):
         transform=None,
         gather_on_cpu=args.gather_on_cpu,
         batch_size=args.batch_size,
-        num_workers=5,
+        num_workers=args.num_workers,
         n_per_class_list=args.n_per_class_list,
         n_tries=args.n_tries,
     )
