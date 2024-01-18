@@ -4,6 +4,7 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import argparse
+import glob
 import logging
 import math
 import os
@@ -291,10 +292,16 @@ def do_train(cfg, model, resume=False):
     metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file, verbose=distributed.is_main_process())
     header = "Training"
 
-    do_profiling = False
-    if do_profiling:
-        activities = [ProfilerActivity.CPU]
-        profiler = profile(activities=activities)
+    if cfg.train.do_profiling:
+        # activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
+        # profiler = profile(activities=activities)
+        profiler_dir = os.path.join(cfg.train.output_dir, "profiler")
+        os.makedirs(profiler_dir, exist_ok=True)
+        profiler = torch.profiler.profile(
+            on_trace_ready=torch.profiler.tensorboard_trace_handler(profiler_dir),
+            with_stack=True,
+        )
+        profiler.start()
 
     for data in metric_logger.log_every(
         data_loader,
@@ -303,6 +310,8 @@ def do_train(cfg, model, resume=False):
         max_iter,
         start_iter,
     ):
+        if cfg.train.do_profiling:
+            profiler.step()
         if data_transform_gpu is not None:
             # current_device_nb = model.student.backbone.device
             if isinstance(data, list):
@@ -391,8 +400,15 @@ def do_train(cfg, model, resume=False):
         iteration = iteration + 1
     metric_logger.synchronize_between_processes()
 
-    if do_profiling:
+    if cfg.train.do_profiling:
+        profiler.stop()
         print(profiler.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+        # create a wandb Artifact
+        profile_art = wandb.Artifact("trace", type="profile")
+        # add the pt.trace.json files to the Artifact
+        profile_art.add_file(glob.glob(profiler_dir + ".pt.trace.json"))
+        # log the artifact
+        profile_art.save()
 
     return {k: meter.global_avg for k, meter in metric_logger.meters.items()}
 
