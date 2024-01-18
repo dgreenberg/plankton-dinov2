@@ -32,7 +32,6 @@ from dinov2.utils.utils import CosineScheduler
 
 from dinov2.train.ssl_meta_arch import SSLMetaArch
 
-
 torch.backends.cuda.matmul.allow_tf32 = True  # PyTorch 1.12 sets this to False by default
 logger = logging.getLogger("dinov2")
 
@@ -185,7 +184,6 @@ def do_test(cfg, model, iteration):
 
 
 def do_train(cfg, model, resume=False):
-    torchvision.disable_beta_transforms_warning()
     torch.backends.cudnn.benchmark = True
 
     model.train()
@@ -293,12 +291,14 @@ def do_train(cfg, model, resume=False):
     header = "Training"
 
     if cfg.train.do_profiling:
+        profiler_schedule = torch.profiler.profiler.schedule(wait=0, warmup=1, active=1, repeat=0, skip_first=0)
+
         print("------- STARTING PROFILER -------")
         activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
         profiler_dir = os.path.join(cfg.train.output_dir, "profiler")
-        print(f"------- CREATING PROFILER DIR: {profiler_dir} -------")
         os.makedirs(profiler_dir, exist_ok=True)
         profiler = torch.profiler.profile(
+            schedule=profiler_schedule,
             activities=activities,
             on_trace_ready=torch.profiler.tensorboard_trace_handler(profiler_dir),
             with_stack=True,
@@ -406,12 +406,13 @@ def do_train(cfg, model, resume=False):
         print("profiler.stop()")
         profiler.stop()
         print("profiler.stopped")
-
-        # print(profiler.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+        print(profiler.key_averages().table(sort_by="cpu_time_total", row_limit=10))
         # create a wandb Artifact
         profile_art = wandb.Artifact("trace", type="profile")
         # add the pt.trace.json files to the Artifact
-        profile_art.add_file(glob.glob(profiler_dir + ".pt.trace.json"))
+        trace_files = glob.glob(profiler_dir + ".pt.trace.json")
+        for trace_file in trace_files:
+            profile_art.add_file(os.path.join(profiler_dir, trace_file))
         # log the artifact
         profile_art.save()
 
@@ -419,6 +420,7 @@ def do_train(cfg, model, resume=False):
 
 
 def main(args):
+    torchvision.disable_beta_transforms_warning()
     cfg = setup(args)
 
     model = SSLMetaArch(cfg).to(torch.device("cuda"))

@@ -363,7 +363,7 @@ def eval_linear(
         loss = sum(losses.values())
 
         # compute the gradients
-        optimizer.zero_grad()
+        optimizer.zero_grad(set_to_none=True)
         loss.backward()
 
         # step
