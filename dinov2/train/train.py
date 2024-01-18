@@ -132,7 +132,7 @@ def select_augmentations(cfg):
         )
         data_transform_gpu = None
     elif cfg.train.augmentations == AugmentationType.TORCHV_GPU.value:
-        data_transform_cpu = v2.ToTensor()
+        data_transform_cpu = None
         data_transform_gpu = DataAugmentationDINO(
             cfg.crops.global_crops_scale,
             cfg.crops.local_crops_scale,
@@ -142,7 +142,7 @@ def select_augmentations(cfg):
             do_transform_on_gpu=True,
         )
     elif cfg.train.augmentations == AugmentationType.KORNIA_GPU.value:
-        data_transform_cpu = v2.ToTensor()
+        data_transform_cpu = None
         data_transform_gpu = DataAugmentationDINO(
             cfg.crops.global_crops_scale,
             cfg.crops.local_crops_scale,
@@ -252,6 +252,7 @@ def do_train(cfg, model, resume=False):
         dataset_str=cfg.train.dataset_path,
         transform=data_transform_cpu,
         target_transform=lambda _: (),
+        with_targets=False,
     )
     # sampler_type = SamplerType.INFINITE
     sampler_type = SamplerType.SHARDED_INFINITE
@@ -297,7 +298,7 @@ def do_train(cfg, model, resume=False):
 
     for data in metric_logger.log_every(
         data_loader,
-        10,
+        20,
         header,
         max_iter,
         start_iter,

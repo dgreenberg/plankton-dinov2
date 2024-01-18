@@ -41,11 +41,16 @@ def get_args_parser(
         type=str,
         help="Output directory to write results and logs",
     )
+
     parser.add_argument(
-        "--opts",
-        help="Extra configuration options",
-        default=[],
-        nargs="+",
+        "opts",
+        help="""
+        Modify config options at the end of the command. For Yacs configs, use
+        space-separated "PATH.KEY VALUE" pairs.
+        For python-based LazyConfig, use "path.key=value".
+        """.strip(),
+        default=None,
+        nargs=argparse.REMAINDER,
     )
     return parser
 

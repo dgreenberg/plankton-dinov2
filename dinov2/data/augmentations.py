@@ -13,6 +13,7 @@ from kornia.augmentation.container import AugmentationSequential
 from .transforms import (
     GaussianBlur,
     KorniaGaussianBlur,
+    MaybeToTensor,
     make_normalize_transform,
 )
 
@@ -152,7 +153,7 @@ class DataAugmentationDINO(object):
             if not self.do_transform_on_gpu:  # if this is done on cpu, we have PIL Image, so to tensor
                 self.normalize = v2.Compose(
                     [
-                        v2.ToTensor(),
+                        MaybeToTensor(),
                         make_normalize_transform(),
                     ]
                 )

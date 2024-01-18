@@ -83,7 +83,7 @@ def make_classification_train_transform(
     mean: Sequence[float] = WHOI_DEFAULT_MEAN,
     std: Sequence[float] = WHOI_DEFAULT_STD,
 ):
-    transforms_list = [v2.RandomResizedCrop(crop_size, interpolation=interpolation)]
+    transforms_list = [v2.RandomResizedCrop(crop_size, interpolation=interpolation, antialias=True)]
     if hflip_prob > 0.0:
         transforms_list.append(v2.RandomHorizontalFlip(hflip_prob))
     transforms_list.extend(
@@ -106,7 +106,7 @@ def make_classification_eval_transform(
     std: Sequence[float] = IMAGENET_DEFAULT_STD,
 ) -> v2.Compose:
     transforms_list = [
-        v2.Resize(resize_size, interpolation=interpolation),
+        v2.Resize(resize_size, interpolation=interpolation, antialias=True),
         v2.CenterCrop(crop_size),
         MaybeToTensor(),
         make_normalize_transform(mean=mean, std=std),

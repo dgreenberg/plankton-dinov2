@@ -67,8 +67,10 @@ class ImageNet(ExtendedVisionDataset):
         transform: Optional[Callable] = None,
         target_transform: Optional[Callable] = None,
         do_short_run: bool = False,
+        with_targets: bool = False,
     ) -> None:
         super().__init__(root, transforms, transform, target_transform)
+        self.root = root
         self._extra_root = extra
         self._split = split
 
@@ -77,6 +79,7 @@ class ImageNet(ExtendedVisionDataset):
         self._class_names = None
 
         self.do_short_run = do_short_run
+        self.with_targets = with_targets
 
     @property
     def split(self) -> "ImageNet.Split":
@@ -149,9 +152,12 @@ class ImageNet(ExtendedVisionDataset):
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
-        entries = self._get_entries()
-        class_index = entries[index]["class_index"]
-        return None if self.split == _Split.TEST else int(class_index)
+        if not self.with_targets or self.split in [_Split.TEST, _Split.ALL]:
+            return None
+        else:
+            entries = self._get_entries()
+            class_index = entries[index]["class_index"]
+            return int(class_index)
 
     def get_targets(self) -> Optional[np.ndarray]:
         entries = self._get_entries()

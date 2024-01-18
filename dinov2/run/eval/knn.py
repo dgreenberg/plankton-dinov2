@@ -13,11 +13,11 @@ from dinov2.eval.knn import main as knn_main
 
 logger = logging.getLogger("dinov2")
 
-def main():
-    knn_args_parser = get_args_parser(add_help=False)
-    args = knn_args_parser.parse_args()
+
+def main(args):
     assert os.path.exists(args.config_file), "Configuration file does not exist!"
 
+    print(args.output_dir)
     setup_logging(args=args, output=args.output_dir, level=logging.INFO, do_eval=True)
     knn_main(args)
 
@@ -25,4 +25,6 @@ def main():
 
 
 if __name__ == "__main__":
-    sys.exit(main())
+    knn_args_parser = get_args_parser(add_help=False)
+    args = knn_args_parser.parse_args()
+    sys.exit(main(args))

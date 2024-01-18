@@ -95,7 +95,7 @@ def get_args_parser(
         "--run_name",
         type=str,
         help="Name for the wandb log",
-        default=f"knn_run_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
+        default=f"knn_run_{datetime.now().strftime('%d%m%Y_%H%M%S')}",
     )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
@@ -286,7 +286,7 @@ def eval_knn(
         persistent_workers=True,
     )
     num_classes = int(train_labels.max() + 1)
-    print('Train num_classes', num_classes)
+    print("Train num_classes", num_classes)
     metric_collection = build_topk_accuracy_metric(accuracy_averaging, num_classes=num_classes)
 
     device = torch.cuda.current_device()
@@ -379,7 +379,7 @@ def eval_knn_with_model(
                 metric_val = results_dict_knn[knn_][metric_name].item()
                 results_dict[f"{knn_} {metric_name}"] = metric_val
 
-                metric_log_msg += f'{metric_name}: {metric_val:.4f} '
+                metric_log_msg += f"{metric_name}: {metric_val:.4f} "
             logger.info(metric_log_msg)
 
     metrics_file_path = os.path.join(output_dir, "results_eval_knn.json")
@@ -394,6 +394,7 @@ def eval_knn_with_model(
 
 def main(args):
     model, autocast_dtype = setup_and_build_model(args)
+    print("args.output_dir", args.output_dir)
     eval_knn_with_model(
         model=model,
         output_dir=args.output_dir,
