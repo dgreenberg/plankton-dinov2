@@ -296,6 +296,7 @@ def do_train(cfg, model, resume=False):
         print("------- STARTING PROFILER -------")
         activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
         profiler_dir = os.path.join(cfg.train.output_dir, "profiler")
+        print(f"------- CREATING PROFILER DIR: {profiler_dir} -------")
         os.makedirs(profiler_dir, exist_ok=True)
         profiler = torch.profiler.profile(
             activities=activities,
