@@ -293,11 +293,12 @@ def do_train(cfg, model, resume=False):
     header = "Training"
 
     if cfg.train.do_profiling:
-        # activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
-        # profiler = profile(activities=activities)
+        print("------- STARTING PROFILER -------")
+        activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
         profiler_dir = os.path.join(cfg.train.output_dir, "profiler")
         os.makedirs(profiler_dir, exist_ok=True)
         profiler = torch.profiler.profile(
+            activities=activities,
             on_trace_ready=torch.profiler.tensorboard_trace_handler(profiler_dir),
             with_stack=True,
         )
@@ -401,8 +402,11 @@ def do_train(cfg, model, resume=False):
     metric_logger.synchronize_between_processes()
 
     if cfg.train.do_profiling:
+        print("profiler.stop()")
         profiler.stop()
-        print(profiler.key_averages().table(sort_by="cpu_time_total", row_limit=10))
+        print("profiler.stopped")
+
+        # print(profiler.key_averages().table(sort_by="cpu_time_total", row_limit=10))
         # create a wandb Artifact
         profile_art = wandb.Artifact("trace", type="profile")
         # add the pt.trace.json files to the Artifact
