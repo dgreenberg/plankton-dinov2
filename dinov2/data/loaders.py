@@ -80,6 +80,7 @@ def make_dataset(
     transform: Optional[Callable] = None,
     target_transform: Optional[Callable] = None,
     with_targets: bool = False,
+    cache_dataset: bool = False,
 ):
     """
     Creates a dataset with the specified parameters.
@@ -96,7 +97,13 @@ def make_dataset(
 
     class_, kwargs = _parse_dataset_str(dataset_str)
     print("Dataset kwargs", kwargs)
-    dataset = class_(transform=transform, target_transform=target_transform, with_targets=with_targets, **kwargs)
+    dataset = class_(
+        transform=transform,
+        target_transform=target_transform,
+        with_targets=with_targets,
+        is_cached=cache_dataset,
+        **kwargs,
+    )
 
     logger.info(f"# of dataset samples: {len(dataset):,d}")
 

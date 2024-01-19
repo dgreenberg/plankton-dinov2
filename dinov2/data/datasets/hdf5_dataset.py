@@ -27,6 +27,8 @@ class HDF5Dataset(ImageNet):
     def get_image_data(self, index: int) -> bytes:
         entries = self._get_entries()
         entry = entries[index]
+        if self.is_cached:
+            return entry["img"]
         image_relpath = entry["path"]
         hdf5_path = entry["hdf5_file"]
         hdf5_file = self.hdf5_handles[hdf5_path]
@@ -34,9 +36,12 @@ class HDF5Dataset(ImageNet):
         return image_data
 
     def get_target(self, index: int) -> Optional[Target]:
+        if self.split in [_SplitHDF5Dataset.TEST, _SplitHDF5Dataset.ALL]:
+            return None
+
         entries = self._get_entries()
         class_index = entries[index]["class_id"]
-        return None if self.split == _SplitHDF5Dataset.TEST else int(class_index)
+        return int(class_index)
 
     def get_class_names(self) -> np.ndarray:
         self._get_entries()
@@ -91,6 +96,8 @@ class HDF5Dataset(ImageNet):
             # Add the HDF5 file name to each entry and accumulate the file entries
             for entry in file_index["files"]:
                 entry["hdf5_file"] = hdf5_file  # Add the HDF5 file name to the entry
+                if self.is_cached:
+                    entry["img"] = file[entry["path"]][()]
                 accumulated.append(entry)
                 class_id = entry["class_id"]
                 class_str = entry["class_str"]

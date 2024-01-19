@@ -90,11 +90,11 @@ def load_pretrained_weights(model, pretrained_weights, checkpoint_key, teacher_s
         img_shape: Union[tuple, int],
         loaded_img_shape: Union[tuple, int],
     ) -> torch.Tensor:
-        print("pos_embed_ref.shape", pos_embeds_ref.shape, flush=True)
-        print("pos_embed_loaded.shape", pos_embeds_loaded.shape, flush=True)
         if pos_embeds_loaded.flatten().shape == pos_embeds_ref.flatten().shape:
             pos_embeds_loaded = pos_embeds_loaded.reshape(pos_embeds_ref.shape)
         else:
+            print("Positional embeddings havbe different shapes, matching them...", end=" ")
+            print("pos_embed_ref: ", pos_embeds_ref.shape, " pos_embed_loaded: ", pos_embeds_loaded.shape)
             pos_embeds_loaded = resize_pos_embed(
                 pos_embeds_loaded, input_shape=img_shape, pos_shape=loaded_img_shape, mode="bicubic"
             )
@@ -102,7 +102,6 @@ def load_pretrained_weights(model, pretrained_weights, checkpoint_key, teacher_s
 
     if "pos_embed" in model.state_dict().keys() and "pos_embed" in state_dict.keys():
         loaded_img_shape = int(np.sqrt(state_dict["pos_embed"].shape[1] - 1))
-        print("loaded_img_shape", loaded_img_shape)
         state_dict["pos_embed"] = match_pos_embeds(
             pos_embeds_ref=model.state_dict()["pos_embed"],
             pos_embeds_loaded=state_dict["pos_embed"],

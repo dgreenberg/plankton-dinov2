@@ -254,6 +254,7 @@ def do_train(cfg, model, resume=False):
         transform=data_transform_cpu,
         target_transform=lambda _: (),
         with_targets=False,
+        cache_dataset=cfg.train.cache_dataset,
     )
     # sampler_type = SamplerType.INFINITE
     sampler_type = SamplerType.SHARDED_INFINITE
