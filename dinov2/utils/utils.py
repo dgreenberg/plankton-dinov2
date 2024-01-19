@@ -7,18 +7,57 @@ import logging
 import os
 import random
 import subprocess
+import sys
+from typing import Union
 from urllib.parse import urlparse
 
 import numpy as np
 import torch
 from torch import nn
 
-from dinov2 import distributed
+from torchvision.transforms.functional import resize, InterpolationMode
 
 logger = logging.getLogger("dinov2")
 
 
-def load_pretrained_weights(model, pretrained_weights, checkpoint_key):
+def resize_pos_embed(pos_embed, input_shape, pos_shape, mode):
+    """Resize pos_embed weights.
+
+    Resize pos_embed using bicubic interpolate method.
+    Args:
+        pos_embed (torch.Tensor): Position embedding weights.
+        input_shpae (tuple): Tuple for (downsampled input image height,
+            downsampled input image width).
+        pos_shape (tuple): The resolution of downsampled origin training
+            image.
+        mode (str): Algorithm used for upsampling:
+            ``'nearest'`` | ``'linear'`` | ``'bilinear'`` | ``'bicubic'`` |
+            ``'trilinear'``. Default: ``'nearest'``
+    Return:
+        torch.Tensor: The resized pos_embed of shape [1, L_new, C]
+    """
+    assert pos_embed.ndim == 3, "shape of pos_embed must be [1, L, C]"
+    if isinstance(pos_shape, tuple):
+        pos_h, pos_w = pos_shape
+    else:
+        pos_h, pos_w = (pos_shape, pos_shape)
+
+    if not isinstance(input_shape, tuple):
+        input_shape = (input_shape, input_shape)
+
+    # keep dim for easy deployment
+    cls_token_weight = pos_embed[:, 0:1]
+    pos_embed_weight = pos_embed[:, 1:]
+    pos_embed_weight = pos_embed_weight.reshape(1, pos_h, pos_w, pos_embed.shape[2]).permute(0, 3, 1, 2)
+    pos_embed_weight = resize(
+        pos_embed_weight, size=input_shape, interpolation=InterpolationMode.BICUBIC, antialias=True
+    )
+    pos_embed_weight = torch.flatten(pos_embed_weight, 2).transpose(1, 2)
+    pos_embed = torch.cat((cls_token_weight, pos_embed_weight), dim=1)
+    return pos_embed
+
+
+def load_pretrained_weights(model, pretrained_weights, checkpoint_key, teacher_student_key="teacher"):
     if urlparse(pretrained_weights).scheme:  # If it looks like an URL
         state_dict = torch.hub.load_state_dict_from_url(pretrained_weights, map_location="cpu")
     else:
@@ -35,8 +74,41 @@ def load_pretrained_weights(model, pretrained_weights, checkpoint_key):
     state_dict = {k.replace("module.", ""): v for k, v in state_dict.items()}
     # remove `backbone.` prefix induced by multicrop wrapper
     state_dict = {k.replace("backbone.", ""): v for k, v in state_dict.items()}
-    state_dict = {k: v for k, v in state_dict.items() if "student" not in k}
-    state_dict = {k.replace("teacher.", ""): v for k, v in state_dict.items()}  # we take teacher for eval
+    if teacher_student_key == "teacher":
+        state_dict = {k: v for k, v in state_dict.items() if "student" not in k}
+        state_dict = {k.replace("teacher.", ""): v for k, v in state_dict.items()}  # we take teacher for eval
+    elif teacher_student_key == "student":
+        state_dict = {k: v for k, v in state_dict.items() if "teacher" not in k}
+        state_dict = {k.replace("student.", ""): v for k, v in state_dict.items()}
+    else:
+        print(f"Error: Key {teacher_student_key} not recognized, options are: 'student', 'teacher'")
+        sys.exit(1)
+
+    def match_pos_embeds(
+        pos_embeds_ref: torch.Tensor,
+        pos_embeds_loaded: torch.Tensor,
+        img_shape: Union[tuple, int],
+        loaded_img_shape: Union[tuple, int],
+    ) -> torch.Tensor:
+        print("pos_embed_ref.shape", pos_embeds_ref.shape, flush=True)
+        print("pos_embed_loaded.shape", pos_embeds_loaded.shape, flush=True)
+        if pos_embeds_loaded.flatten().shape == pos_embeds_ref.flatten().shape:
+            pos_embeds_loaded = pos_embeds_loaded.reshape(pos_embeds_ref.shape)
+        else:
+            pos_embeds_loaded = resize_pos_embed(
+                pos_embeds_loaded, input_shape=img_shape, pos_shape=loaded_img_shape, mode="bicubic"
+            )
+        return pos_embeds_loaded
+
+    if "pos_embed" in model.state_dict().keys() and "pos_embed" in state_dict.keys():
+        loaded_img_shape = int(np.sqrt(state_dict["pos_embed"].shape[1] - 1))
+        print("loaded_img_shape", loaded_img_shape)
+        state_dict["pos_embed"] = match_pos_embeds(
+            pos_embeds_ref=model.state_dict()["pos_embed"],
+            pos_embeds_loaded=state_dict["pos_embed"],
+            img_shape=model.img_size // model.patch_size,
+            loaded_img_shape=loaded_img_shape,
+        )
 
     # shape loaded state_dict like model state_dict
     state_dict = {

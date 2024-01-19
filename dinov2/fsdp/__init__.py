@@ -42,6 +42,7 @@ def get_fsdp_wrapper(model_cfg, modules_to_wrap=set()):
 
     local_rank = distributed.get_local_rank()
 
+    # modules_to_wrap is "vision_transformer.BlockChunk"
     fsdp_wrapper = partial(
         FSDP,
         sharding_strategy=sharding_strategy_config,
@@ -50,6 +51,8 @@ def get_fsdp_wrapper(model_cfg, modules_to_wrap=set()):
         sync_module_states=True,
         use_orig_params=True,
         auto_wrap_policy=ModuleWrapPolicy(modules_to_wrap),
+        # backward_prefetch=BackwardPrefetch.BACKWARD_PRE,
+        # optional, enables starting bkwd pass without waiting for fwd to finish, mem slight incr for speed
     )
     return fsdp_wrapper
 

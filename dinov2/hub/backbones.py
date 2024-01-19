@@ -39,6 +39,7 @@ def _make_dinov2_model(
             raise AssertionError(f"Unsupported weights: {weights}")
 
     model_base_name = _make_dinov2_model_name(arch_name, patch_size)
+    print("block_chunks", block_chunks)
     vit_kwargs = dict(
         img_size=img_size,
         patch_size=patch_size,

@@ -524,7 +524,7 @@ class TIMMVisionTransformer(BaseModule):
         return x
 
     @staticmethod
-    def resize_pos_embed(pos_embed, input_shpae, pos_shape, mode):
+    def resize_pos_embed(pos_embed, input_shape, pos_shape, mode):
         """Resize pos_embed weights.
 
         Resize pos_embed using bicubic interpolate method.
@@ -546,7 +546,7 @@ class TIMMVisionTransformer(BaseModule):
         cls_token_weight = pos_embed[:, 0:1]
         pos_embed_weight = pos_embed[:, (-1 * pos_h * pos_w) :]
         pos_embed_weight = pos_embed_weight.reshape(1, pos_h, pos_w, pos_embed.shape[2]).permute(0, 3, 1, 2)
-        pos_embed_weight = resize(pos_embed_weight, size=input_shpae, align_corners=False, mode=mode)
+        pos_embed_weight = resize(pos_embed_weight, size=input_shape, align_corners=False, mode=mode)
         pos_embed_weight = torch.flatten(pos_embed_weight, 2).transpose(1, 2)
         pos_embed = torch.cat((cls_token_weight, pos_embed_weight), dim=1)
         return pos_embed

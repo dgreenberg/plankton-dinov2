@@ -25,7 +25,7 @@ from datetime import datetime
 from dinov2.data import SamplerType, make_data_loader, make_dataset
 from dinov2.data import collate_data_and_cast, DataAugmentationDINO, MaskingGenerator
 import dinov2.distributed as distributed
-from dinov2.fsdp import FSDPCheckpointer
+from dinov2.fsdp import FSDPCheckpointer, get_fsdp_modules
 from dinov2.logging import MetricLogger
 from dinov2.utils.config import setup
 from dinov2.utils.utils import CosineScheduler
@@ -185,6 +185,8 @@ def do_test(cfg, model, iteration):
 
 def do_train(cfg, model, resume=False):
     torch.backends.cudnn.benchmark = True
+    fsdp_modules = get_fsdp_modules(model)
+    print(f"FSDP: #{len(fsdp_modules)} Modules ", get_fsdp_modules(model), force=True, flush=True)
 
     model.train()
     if cfg.train.use_torch_compile:
