@@ -99,7 +99,13 @@ class FSDPCheckpointer(Checkpointer):
 
         data = {}
         state_dict_type = StateDictType.FULL_STATE_DICT
-        if distributed.get_global_size() > 1 and is_sharded_fsdp(get_fsdp_wrapper(self.model.cfg)):
+
+        # check if all BlockChunks are FSDP and Sharded
+        if (
+            distributed.get_global_size() > 1
+            and all([is_sharded_fsdp(self.model.student[k]) for k in self.model.student.keys()])
+            and all([is_sharded_fsdp(self.model.teacher[k]) for k in self.model.teacher.keys()])
+        ):
             fsdp_cfg = torch.distributed.fsdp.FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
         else:
             fsdp_cfg = None

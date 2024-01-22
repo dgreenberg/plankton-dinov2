@@ -186,7 +186,7 @@ def do_test(cfg, model, iteration):
 def do_train(cfg, model, resume=False):
     torch.backends.cudnn.benchmark = True
     fsdp_modules = get_fsdp_modules(model)
-    print(f"FSDP: #{len(fsdp_modules)} Modules ", get_fsdp_modules(model), force=True, flush=True)
+    print(f"------ FSDP: #{len(fsdp_modules)} Modules ------")
 
     model.train()
     if cfg.train.use_torch_compile:

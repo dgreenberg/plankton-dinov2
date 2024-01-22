@@ -14,6 +14,7 @@ import torch.distributed as dist
 
 global RANK, WORLD_SIZE, LOCAL_RANK, LOCAL_WORLD_SIZE
 
+
 def is_enabled() -> bool:
     """
     Returns:
@@ -44,7 +45,7 @@ def get_local_rank() -> int:
         The rank of the current process within the local (per-machine) process group.
     """
     return LOCAL_RANK if is_enabled() else 0
-    
+
 
 def get_local_size() -> int:
     """
@@ -134,7 +135,6 @@ def _check_env_variable(key: str, new_value: str):
 
 class _TorchDistributedEnvironment:
     def __init__(self):
-
         dist.init_process_group(backend="nccl")
         dist.barrier()
 
@@ -142,7 +142,7 @@ class _TorchDistributedEnvironment:
         RANK = dist.get_rank(group=None)
         WORLD_SIZE = dist.get_world_size(group=None)
         # LOCAL_WORLD_SIZE = torch.cuda.device_count() # does not work bc detects all gpus on node
-        LOCAL_WORLD_SIZE = dist.get_world_size() # TODO test this for multi node
+        LOCAL_WORLD_SIZE = dist.get_world_size()  # TODO test this for multi node
         LOCAL_RANK = RANK % LOCAL_WORLD_SIZE
         # or if num nodes in env vars
         # LOCAL_WORLD_SIZE = WORLD_SIZE // node_count
@@ -154,7 +154,6 @@ class _TorchDistributedEnvironment:
         self.local_rank = LOCAL_RANK
         self.local_world_size = LOCAL_WORLD_SIZE
 
-
     # Slurm job created with sbatch, submitit, etc...
     def _set_from_slurm_env(self):
         # logger.info("Initialization from Slurm environment")
@@ -163,7 +162,6 @@ class _TorchDistributedEnvironment:
 
         self.master_addr = nodes[0]
         self.master_port = _get_master_port(seed=job_id)
-
 
     # Single node job with preset environment (i.e. torchrun)
     def _set_from_preset_env(self):
@@ -223,11 +221,10 @@ def enable(*, set_cuda_current_device: bool = True, overwrite: bool = False, all
             _check_env_variable(key, value)
         os.environ[key] = value
 
-    print('torch_is_enabled', is_enabled())
-    print('get_local_rank', get_local_rank())
-    print('get_global_rank', get_global_rank())
-    print('get_global_size', get_global_size())
-    print('get_local_size', get_local_size())
+    print("get_local_rank", get_local_rank())
+    print("get_global_rank", get_global_rank())
+    print("get_global_size", get_global_size())
+    print("get_local_size", get_local_size())
 
     # Finalize setup
     _restrict_print_to_main_process()
