@@ -10,9 +10,8 @@ dist/
 
 .vscode/
 wandb/
-.DS_Store
+dinov2/.DS_Store
 *.sh~
-
 *.sh
 *.yaml
 notebooks/dataloader_benchmark_results.csv
@@ -26,3 +25,4 @@ logs/log.txt
 logs/*.txt
 logs/
 notebooks/test_nb.ipynb
+.DS_Store
