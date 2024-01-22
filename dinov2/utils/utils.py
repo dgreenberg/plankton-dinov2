@@ -47,7 +47,8 @@ def resize_pos_embed(pos_embed, input_shape, pos_shape, mode):
 
     # keep dim for easy deployment
     cls_token_weight = pos_embed[:, 0:1]
-    pos_embed_weight = pos_embed[:, 1:]
+    pos_embed_weight = pos_embed[:, (-1 * pos_h * pos_w) :]
+    # pos_embed_weight = pos_embed[:, 1:] # not compatible w registers
     pos_embed_weight = pos_embed_weight.reshape(1, pos_h, pos_w, pos_embed.shape[2]).permute(0, 3, 1, 2)
     pos_embed_weight = resize(
         pos_embed_weight, size=input_shape, interpolation=InterpolationMode.BICUBIC, antialias=True

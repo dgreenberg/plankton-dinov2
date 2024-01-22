@@ -65,7 +65,6 @@ def make_normalize_transform(
     mean: Sequence[float] = WHOI_DEFAULT_MEAN,
     std: Sequence[float] = WHOI_DEFAULT_STD,
     use_kornia=False,
-    use_imagenet_means=True,
 ) -> Union[v2.Normalize, augmentation.Normalize]:
     if use_kornia:
         return augmentation.Normalize(mean, std, p=1.0, keepdim=False)
@@ -102,8 +101,8 @@ def make_classification_eval_transform(
     resize_size: int = 256,
     interpolation=v2.InterpolationMode.BICUBIC,
     crop_size: int = 224,
-    mean: Sequence[float] = IMAGENET_DEFAULT_MEAN,
-    std: Sequence[float] = IMAGENET_DEFAULT_STD,
+    mean: Sequence[float] = WHOI_DEFAULT_MEAN,
+    std: Sequence[float] = WHOI_DEFAULT_STD,
 ) -> v2.Compose:
     transforms_list = [
         v2.Resize(resize_size, interpolation=interpolation, antialias=True),

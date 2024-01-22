@@ -99,7 +99,7 @@ class FSDPCheckpointer(Checkpointer):
 
         data = {}
         state_dict_type = StateDictType.FULL_STATE_DICT
-        if distributed.get_global_size() > 1:
+        if distributed.get_global_size() > 1 and is_sharded_fsdp(get_fsdp_wrapper(self.model.cfg)):
             fsdp_cfg = torch.distributed.fsdp.FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
         else:
             fsdp_cfg = None
