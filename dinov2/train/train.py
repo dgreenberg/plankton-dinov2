@@ -8,9 +8,7 @@ import glob
 import logging
 import math
 import os
-import random
 import sys
-from datetime import datetime
 from enum import Enum
 from functools import partial
 
@@ -18,8 +16,7 @@ import torch
 import torchvision
 import wandb
 from fvcore.common.checkpoint import PeriodicCheckpointer
-from torch.profiler import ProfilerActivity, profile, record_function
-from torchvision.transforms import v2
+from torch.profiler import ProfilerActivity
 
 import dinov2.distributed as distributed
 from dinov2.data import (
@@ -32,6 +29,7 @@ from dinov2.data import (
 )
 from dinov2.fsdp import FSDPCheckpointer, get_fsdp_modules
 from dinov2.logging import MetricLogger
+from dinov2.models.vision_transformer import count_parameters
 from dinov2.train.ssl_meta_arch import SSLMetaArch
 from dinov2.utils.config import setup
 from dinov2.utils.utils import CosineScheduler
@@ -200,10 +198,6 @@ def do_test(cfg, model, iteration):
 
 
 def do_train(cfg, model, resume=False):
-    torch.backends.cudnn.benchmark = True
-    fsdp_modules = get_fsdp_modules(model)
-    print(f"------ FSDP: #{len(fsdp_modules)} Modules ------")
-
     model.train()
     if cfg.train.use_torch_compile:
         print("--- COMPILING TORCH MODULE ---")
@@ -319,19 +313,14 @@ def do_train(cfg, model, resume=False):
     header = "Training"
 
     if cfg.train.do_profiling:
-        profiler_schedule = torch.profiler.profiler.schedule(
-            wait=0, warmup=1, active=1, repeat=0, skip_first=0
-        )
-
         print("------- STARTING PROFILER -------")
         activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
         profiler_dir = os.path.join(cfg.train.output_dir, "profiler")
         os.makedirs(profiler_dir, exist_ok=True)
         profiler = torch.profiler.profile(
-            schedule=profiler_schedule,
             activities=activities,
             on_trace_ready=torch.profiler.tensorboard_trace_handler(profiler_dir),
-            with_stack=True,
+            with_stack=False,
         )
         profiler.start()
 
@@ -468,6 +457,12 @@ def main(args):
 
     model = SSLMetaArch(cfg).to(torch.device("cuda"))
     model.prepare_for_distributed_training()
+
+    torch.backends.cudnn.benchmark = True
+    fsdp_modules = get_fsdp_modules(model)
+    print(
+        f"------ FSDP: #{len(fsdp_modules)} Modules, {count_parameters(model)/1e6:.5}M parameters total ------"
+    )
 
     if distributed.is_main_process():
         logger.info("Model:\n{}".format(model))
