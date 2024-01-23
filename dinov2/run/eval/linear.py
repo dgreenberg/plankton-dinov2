@@ -8,9 +8,9 @@ import os
 import sys
 
 from dinov2.eval.linear import get_args_parser as get_linear_args_parser
+from dinov2.eval.linear import main as linear_main
 from dinov2.logging import setup_logging
 from dinov2.run.submit import get_args_parser, submit_jobs
-from dinov2.eval.linear import main as linear_main
 
 logger = logging.getLogger("dinov2")
 

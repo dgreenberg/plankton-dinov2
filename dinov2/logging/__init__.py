@@ -9,11 +9,12 @@ import os
 import sys
 from typing import Optional
 
+import torch.distributed as tdist
 import wandb
 
 import dinov2.distributed as distributed
+
 from .helpers import MetricLogger, SmoothedValue
-import torch.distributed as tdist
 
 
 # So that calling _configure_logger multiple times won't add many handlers
@@ -49,7 +50,9 @@ def _configure_logger(
     #   [IWEF]yyyymmdd hh:mm:ss.uuuuuu threadid file:line] msg
     # but use a shorter timestamp and include the logger name:
     #   [IWEF]yyyymmdd hh:mm:ss logger threadid file:line] msg
-    fmt_prefix = "%(levelname).1s%(asctime)s %(process)s %(name)s %(filename)s:%(lineno)s] "
+    fmt_prefix = (
+        "%(levelname).1s%(asctime)s %(process)s %(name)s %(filename)s:%(lineno)s] "
+    )
     fmt_message = "%(message)s"
     if not disable_prefix:
         fmt = fmt_prefix + fmt_message
@@ -116,4 +119,10 @@ def setup_logging(
         else:
             project = "dinov2_plankton"
 
-        wandb.init(name=args.run_name, entity="kainmueller-lab", project=project, config=args, dir=output)
+        wandb.init(
+            name=args.run_name,
+            entity="kainmueller-lab",
+            project=project,
+            config=args,
+            dir=output,
+        )

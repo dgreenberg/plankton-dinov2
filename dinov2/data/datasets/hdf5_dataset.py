@@ -2,7 +2,7 @@ import glob
 import json
 import os
 from enum import Enum
-from typing import Union, Optional, Tuple
+from typing import Optional
 
 import h5py
 import numpy as np
@@ -61,7 +61,9 @@ class HDF5Dataset(ImageNet):
             return f"-{self._split.value.upper()}.hdf5"
 
     def _get_extra_full_path(self, extra_path: str) -> str:
-        print(f"root: {self.root}, extra_root: {self._extra_root}, extra_path: {extra_path}")
+        print(
+            f"root: {self.root}, extra_root: {self._extra_root}, extra_path: {extra_path}"
+        )
         if extra_path is None:
             extra_path = ""
         if os.path.isfile(self.root):
@@ -118,7 +120,9 @@ class HDF5Dataset(ImageNet):
         unique_class_ids = np.unique([el["class_id"] for el in accumulated])
         unique_class_names = np.unique([el["class_str"] for el in accumulated])
         print(f"#unique_class_ids: {self._split}, {len(unique_class_ids)}")
-        print(f"#unique_class_names: {unique_class_names[:8]}, {len(unique_class_names)}")
+        print(
+            f"#unique_class_names: {unique_class_names[:8]}, {len(unique_class_names)}"
+        )
 
         self._entries = accumulated
         self._class_ids = class_ids

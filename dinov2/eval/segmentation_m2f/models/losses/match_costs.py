@@ -129,9 +129,15 @@ class CrossEntropyLossCost:
         cls_pred = cls_pred.flatten(1).float()
         gt_labels = gt_labels.flatten(1).float()
         n = cls_pred.shape[1]
-        pos = F.binary_cross_entropy_with_logits(cls_pred, torch.ones_like(cls_pred), reduction="none")
-        neg = F.binary_cross_entropy_with_logits(cls_pred, torch.zeros_like(cls_pred), reduction="none")
-        cls_cost = torch.einsum("nc,mc->nm", pos, gt_labels) + torch.einsum("nc,mc->nm", neg, 1 - gt_labels)
+        pos = F.binary_cross_entropy_with_logits(
+            cls_pred, torch.ones_like(cls_pred), reduction="none"
+        )
+        neg = F.binary_cross_entropy_with_logits(
+            cls_pred, torch.zeros_like(cls_pred), reduction="none"
+        )
+        cls_cost = torch.einsum("nc,mc->nm", pos, gt_labels) + torch.einsum(
+            "nc,mc->nm", neg, 1 - gt_labels
+        )
         cls_cost = cls_cost / n
 
         return cls_cost

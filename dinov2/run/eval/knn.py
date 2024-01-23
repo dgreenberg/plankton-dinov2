@@ -8,8 +8,8 @@ import os
 import sys
 
 from dinov2.eval.knn import get_args_parser
-from dinov2.logging import setup_logging
 from dinov2.eval.knn import main as knn_main
+from dinov2.logging import setup_logging
 
 logger = logging.getLogger("dinov2")
 

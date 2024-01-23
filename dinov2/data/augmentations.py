@@ -6,9 +6,9 @@
 import logging
 
 from kornia import augmentation
-from torchvision.transforms import v2
-from kornia.constants import Resample
 from kornia.augmentation.container import AugmentationSequential
+from kornia.constants import Resample
+from torchvision.transforms import v2
 
 from .transforms import (
     GaussianBlur,
@@ -16,7 +16,6 @@ from .transforms import (
     MaybeToTensor,
     make_normalize_transform,
 )
-
 
 logger = logging.getLogger("dinov2")
 
@@ -75,7 +74,12 @@ class DataAugmentationDINO(object):
             # color distorsions / blurring
             color_jittering = AugmentationSequential(
                 augmentation.ColorJitter(
-                    brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1, same_on_batch=False, p=0.8
+                    brightness=0.4,
+                    contrast=0.4,
+                    saturation=0.2,
+                    hue=0.1,
+                    same_on_batch=False,
+                    p=0.8,
                 ),
                 augmentation.RandomGrayscale(p=0.2),
             )
@@ -84,7 +88,9 @@ class DataAugmentationDINO(object):
 
             global_transfo2_extra = AugmentationSequential(
                 KorniaGaussianBlur(p=0.1),
-                augmentation.RandomSolarize(thresholds=0.5, additions=0.1, same_on_batch=False, p=0.2),
+                augmentation.RandomSolarize(
+                    thresholds=0.5, additions=0.1, same_on_batch=False, p=0.2
+                ),
             )
 
             local_transfo_extra = KorniaGaussianBlur(p=1.0)
@@ -92,9 +98,15 @@ class DataAugmentationDINO(object):
             # normalization
             self.normalize = make_normalize_transform(use_kornia=True)
 
-            self.global_transfo1 = AugmentationSequential(color_jittering, global_transfo1_extra, self.normalize)
-            self.global_transfo2 = AugmentationSequential(color_jittering, global_transfo2_extra, self.normalize)
-            self.local_transfo = AugmentationSequential(color_jittering, local_transfo_extra, self.normalize)
+            self.global_transfo1 = AugmentationSequential(
+                color_jittering, global_transfo1_extra, self.normalize
+            )
+            self.global_transfo2 = AugmentationSequential(
+                color_jittering, global_transfo2_extra, self.normalize
+            )
+            self.local_transfo = AugmentationSequential(
+                color_jittering, local_transfo_extra, self.normalize
+            )
 
         ########
         else:
@@ -127,7 +139,11 @@ class DataAugmentationDINO(object):
             color_jittering = v2.Compose(
                 [
                     v2.RandomApply(
-                        [v2.ColorJitter(brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1)],
+                        [
+                            v2.ColorJitter(
+                                brightness=0.4, contrast=0.4, saturation=0.2, hue=0.1
+                            )
+                        ],
                         p=0.8,
                     ),
                     v2.RandomGrayscale(p=0.2),
@@ -150,7 +166,9 @@ class DataAugmentationDINO(object):
             local_transfo_extra = GaussianBlur(p=0.5)
 
             # normalization
-            if not self.do_transform_on_gpu:  # if this is done on cpu, we have PIL Image, so to tensor
+            if (
+                not self.do_transform_on_gpu
+            ):  # if this is done on cpu, we have PIL Image, so to tensor
                 self.normalize = v2.Compose(
                     [
                         MaybeToTensor(),
@@ -160,9 +178,15 @@ class DataAugmentationDINO(object):
             else:  # if on gpu, the images are already tensors
                 self.normalize = make_normalize_transform()
 
-            self.global_transfo1 = v2.Compose([color_jittering, global_transfo1_extra, self.normalize])
-            self.global_transfo2 = v2.Compose([color_jittering, global_transfo2_extra, self.normalize])
-            self.local_transfo = v2.Compose([color_jittering, local_transfo_extra, self.normalize])
+            self.global_transfo1 = v2.Compose(
+                [color_jittering, global_transfo1_extra, self.normalize]
+            )
+            self.global_transfo2 = v2.Compose(
+                [color_jittering, global_transfo2_extra, self.normalize]
+            )
+            self.local_transfo = v2.Compose(
+                [color_jittering, local_transfo_extra, self.normalize]
+            )
 
     def __call__(self, image):
         output = {}
@@ -181,7 +205,8 @@ class DataAugmentationDINO(object):
 
         # local crops:
         local_crops = [
-            self.local_transfo(self.geometric_augmentation_local(image)) for _ in range(self.local_crops_number)
+            self.local_transfo(self.geometric_augmentation_local(image))
+            for _ in range(self.local_crops_number)
         ]
         output["local_crops"] = local_crops
         output["offsets"] = ()

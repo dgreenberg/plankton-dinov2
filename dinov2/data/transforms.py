@@ -6,8 +6,8 @@
 from typing import Any, Sequence, Union
 
 import torch
-from torchvision.transforms import v2
 from kornia import augmentation
+from torchvision.transforms import v2
 
 
 class KorniaGaussianBlur(augmentation.RandomGaussianBlur):
@@ -15,7 +15,9 @@ class KorniaGaussianBlur(augmentation.RandomGaussianBlur):
     Apply Gaussian Blur to the a Tensor using Kornia.
     """
 
-    def __init__(self, *, p: float = 0.5, radius_min: float = 0.1, radius_max: float = 2.0):
+    def __init__(
+        self, *, p: float = 0.5, radius_min: float = 0.1, radius_max: float = 2.0
+    ):
         super().__init__(
             kernel_size=9,
             sigma=(radius_min, radius_max),
@@ -29,7 +31,9 @@ class GaussianBlur(v2.RandomApply):
     Apply Gaussian Blur to the PIL image.
     """
 
-    def __init__(self, *, p: float = 0.5, radius_min: float = 0.1, radius_max: float = 2.0):
+    def __init__(
+        self, *, p: float = 0.5, radius_min: float = 0.1, radius_max: float = 2.0
+    ):
         # NOTE: torchvision is applying 1 - probability to return the original image
         keep_p = 1 - p
         transform = v2.GaussianBlur(kernel_size=9, sigma=(radius_min, radius_max))
@@ -82,7 +86,9 @@ def make_classification_train_transform(
     mean: Sequence[float] = WHOI_DEFAULT_MEAN,
     std: Sequence[float] = WHOI_DEFAULT_STD,
 ):
-    transforms_list = [v2.RandomResizedCrop(crop_size, interpolation=interpolation, antialias=True)]
+    transforms_list = [
+        v2.RandomResizedCrop(crop_size, interpolation=interpolation, antialias=True)
+    ]
     if hflip_prob > 0.0:
         transforms_list.append(v2.RandomHorizontalFlip(hflip_prob))
     transforms_list.extend(

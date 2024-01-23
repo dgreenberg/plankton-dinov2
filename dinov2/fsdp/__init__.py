@@ -4,19 +4,18 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import os
+from functools import partial
 from typing import Any
 
 import torch
-import dinov2.distributed as distributed
-from functools import partial
 from fvcore.common.checkpoint import Checkpointer
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp import ShardingStrategy
-from torch.distributed.fsdp import MixedPrecision
-from torch.distributed.fsdp import StateDictType
+from torch.distributed.fsdp import MixedPrecision, ShardingStrategy, StateDictType
+from torch.distributed.fsdp._runtime_utils import _reshard
 from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
 from torch.distributed.fsdp.wrap import ModuleWrapPolicy
-from torch.distributed.fsdp._runtime_utils import _reshard
+
+import dinov2.distributed as distributed
 
 
 def get_fsdp_wrapper(model_cfg, modules_to_wrap=set()):
@@ -103,10 +102,22 @@ class FSDPCheckpointer(Checkpointer):
         # check if all BlockChunks are FSDP and Sharded
         if (
             distributed.get_global_size() > 1
-            and all([is_sharded_fsdp(self.model.student[k]) for k in self.model.student.keys()])
-            and all([is_sharded_fsdp(self.model.teacher[k]) for k in self.model.teacher.keys()])
+            and all(
+                [
+                    is_sharded_fsdp(self.model.student[k])
+                    for k in self.model.student.keys()
+                ]
+            )
+            and all(
+                [
+                    is_sharded_fsdp(self.model.teacher[k])
+                    for k in self.model.teacher.keys()
+                ]
+            )
         ):
-            fsdp_cfg = torch.distributed.fsdp.FullStateDictConfig(offload_to_cpu=True, rank0_only=True)
+            fsdp_cfg = torch.distributed.fsdp.FullStateDictConfig(
+                offload_to_cpu=True, rank0_only=True
+            )
         else:
             fsdp_cfg = None
         with FSDP.state_dict_type(self.model, state_dict_type, fsdp_cfg):

@@ -8,31 +8,37 @@ import glob
 import logging
 import math
 import os
-from functools import partial
-import sys
-import wandb
-from enum import Enum
 import random
-
-from fvcore.common.checkpoint import PeriodicCheckpointer
-import torch
-from torchvision.transforms import v2
-import torchvision
-from torch.profiler import profile, record_function, ProfilerActivity
-
+import sys
 from datetime import datetime
+from enum import Enum
+from functools import partial
 
-from dinov2.data import SamplerType, make_data_loader, make_dataset
-from dinov2.data import collate_data_and_cast, DataAugmentationDINO, MaskingGenerator
+import torch
+import torchvision
+import wandb
+from fvcore.common.checkpoint import PeriodicCheckpointer
+from torch.profiler import ProfilerActivity, profile, record_function
+from torchvision.transforms import v2
+
 import dinov2.distributed as distributed
+from dinov2.data import (
+    DataAugmentationDINO,
+    MaskingGenerator,
+    SamplerType,
+    collate_data_and_cast,
+    make_data_loader,
+    make_dataset,
+)
 from dinov2.fsdp import FSDPCheckpointer, get_fsdp_modules
 from dinov2.logging import MetricLogger
+from dinov2.train.ssl_meta_arch import SSLMetaArch
 from dinov2.utils.config import setup
 from dinov2.utils.utils import CosineScheduler
 
-from dinov2.train.ssl_meta_arch import SSLMetaArch
-
-torch.backends.cuda.matmul.allow_tf32 = True  # PyTorch 1.12 sets this to False by default
+torch.backends.cuda.matmul.allow_tf32 = (
+    True  # PyTorch 1.12 sets this to False by default
+)
 logger = logging.getLogger("dinov2")
 
 
@@ -44,13 +50,17 @@ class AugmentationType(Enum):
 
 def get_args_parser(add_help: bool = True):
     parser = argparse.ArgumentParser("DINOv2 training", add_help=add_help)
-    parser.add_argument("--config-file", default="", metavar="FILE", help="path to config file")
+    parser.add_argument(
+        "--config-file", default="", metavar="FILE", help="path to config file"
+    )
     parser.add_argument(
         "--no-resume",
         action="store_true",
         help="Whether to not attempt to resume from the checkpoint directory. ",
     )
-    parser.add_argument("--eval-only", action="store_true", help="perform evaluation only")
+    parser.add_argument(
+        "--eval-only", action="store_true", help="perform evaluation only"
+    )
     parser.add_argument("--eval", type=str, default="", help="Eval type to perform")
     parser.add_argument(
         "opts",
@@ -62,13 +72,17 @@ def get_args_parser(add_help: bool = True):
         default=None,
         nargs=argparse.REMAINDER,
     )
-    parser.add_argument("--run_name", type=str, help="Name for the wandb log", default="run_")
+    parser.add_argument(
+        "--run_name", type=str, help="Name for the wandb log", default="run_"
+    )
 
     return parser
 
 
 def build_optimizer(cfg, params_groups):
-    return torch.optim.AdamW(params_groups, betas=(cfg.optim.adamw_beta1, cfg.optim.adamw_beta2))
+    return torch.optim.AdamW(
+        params_groups, betas=(cfg.optim.adamw_beta1, cfg.optim.adamw_beta2)
+    )
 
 
 def build_schedulers(cfg):
@@ -153,7 +167,9 @@ def select_augmentations(cfg):
             use_kornia=True,
         )
     else:
-        print(f"ERROR: type augmentation type {cfg.train.augmentations} is not supported")
+        print(
+            f"ERROR: type augmentation type {cfg.train.augmentations} is not supported"
+        )
         print(
             f"Supported types are: {AugmentationType.TORCHV_CPU.value}, {AugmentationType.TORCHV_GPU.value}, {AugmentationType.KORNIA_GPU.value}"
         )
@@ -208,11 +224,18 @@ def do_train(cfg, model, resume=False):
     ) = build_schedulers(cfg)
 
     # checkpointer
-    checkpointer = FSDPCheckpointer(model, cfg.train.output_dir, optimizer=optimizer, save_to_disk=True)
+    checkpointer = FSDPCheckpointer(
+        model, cfg.train.output_dir, optimizer=optimizer, save_to_disk=True
+    )
 
     print("cfg.MODEL.WEIGHTS", cfg.MODEL.WEIGHTS, "resume", resume)
     if os.path.isfile(cfg.MODEL.WEIGHTS):
-        start_iter = checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get("iteration", -1) + 1
+        start_iter = (
+            checkpointer.resume_or_load(cfg.MODEL.WEIGHTS, resume=resume).get(
+                "iteration", -1
+            )
+            + 1
+        )
     else:
         start_iter = 0
 
@@ -290,11 +313,15 @@ def do_train(cfg, model, resume=False):
 
     logger.info("Starting training from iteration {}".format(start_iter))
     metrics_file = os.path.join(cfg.train.output_dir, "training_metrics.json")
-    metric_logger = MetricLogger(delimiter="  ", output_file=metrics_file, verbose=distributed.is_main_process())
+    metric_logger = MetricLogger(
+        delimiter="  ", output_file=metrics_file, verbose=distributed.is_main_process()
+    )
     header = "Training"
 
     if cfg.train.do_profiling:
-        profiler_schedule = torch.profiler.profiler.schedule(wait=0, warmup=1, active=1, repeat=0, skip_first=0)
+        profiler_schedule = torch.profiler.profiler.schedule(
+            wait=0, warmup=1, active=1, repeat=0, skip_first=0
+        )
 
         print("------- STARTING PROFILER -------")
         activities = [ProfilerActivity.CPU, ProfilerActivity.CUDA]
@@ -323,15 +350,23 @@ def do_train(cfg, model, resume=False):
                 data = data[0]
             data = data.to(device=f"cuda:{torch.cuda.current_device()}")
             data = data_transform_gpu(data)
-            data = collate_fn(data)  # collate_fn collates crops and computes masks tensors
+            data = collate_fn(
+                data
+            )  # collate_fn collates crops and computes masks tensors
 
             data = {
-                k: (v.to(device=f"cuda:{torch.cuda.current_device()}") if torch.is_tensor(v) and not v.is_cuda else v)
+                k: (
+                    v.to(device=f"cuda:{torch.cuda.current_device()}")
+                    if torch.is_tensor(v) and not v.is_cuda
+                    else v
+                )
                 for k, v in data.items()
             }
 
         current_batch_size = data["collated_global_crops"].shape[0] / 2
-        tot_nb_seen_samples += current_batch_size * distributed.get_global_size()  # to get effective batch size
+        tot_nb_seen_samples += (
+            current_batch_size * distributed.get_global_size()
+        )  # to get effective batch size
         if iteration > max_iter:
             return
 
@@ -368,7 +403,9 @@ def do_train(cfg, model, resume=False):
         if distributed.get_global_size() > 1:
             for v in loss_dict.values():
                 torch.distributed.all_reduce(v)
-        loss_dict_reduced = {k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()}
+        loss_dict_reduced = {
+            k: v.item() / distributed.get_global_size() for k, v in loss_dict.items()
+        }
 
         if math.isnan(sum(loss_dict_reduced.values())):
             logger.info("NaN detected")
@@ -397,7 +434,10 @@ def do_train(cfg, model, resume=False):
 
         # checkpointing and testing
 
-        if cfg.evaluation.eval_period_iterations > 0 and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0:
+        if (
+            cfg.evaluation.eval_period_iterations > 0
+            and (iteration + 1) % cfg.evaluation.eval_period_iterations == 0
+        ):
             do_test(cfg, model, f"training_{iteration}")
             torch.cuda.synchronize()
 
