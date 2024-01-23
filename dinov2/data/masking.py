@@ -3,8 +3,9 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
-import random
 import math
+import random
+
 import numpy as np
 
 
@@ -26,7 +27,9 @@ class MaskingGenerator:
         self.num_masking_patches = num_masking_patches
 
         self.min_num_patches = min_num_patches
-        self.max_num_patches = num_masking_patches if max_num_patches is None else max_num_patches
+        self.max_num_patches = (
+            num_masking_patches if max_num_patches is None else max_num_patches
+        )
 
         max_aspect = max_aspect or 1 / min_aspect
         self.log_aspect_ratio = (math.log(min_aspect), math.log(max_aspect))

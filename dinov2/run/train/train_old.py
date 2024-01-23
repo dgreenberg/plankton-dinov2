@@ -8,9 +8,8 @@ import os
 import sys
 
 from dinov2.logging import setup_logging
-from dinov2.train import get_args_parser as get_train_args_parser
 from dinov2.run.submit import get_args_parser, submit_jobs
-
+from dinov2.train import get_args_parser as get_train_args_parser
 
 logger = logging.getLogger("dinov2")
 
@@ -36,8 +35,8 @@ class Trainer(object):
         # import submitit
 
         # job_env = submitit.JobEnvironment()
-        if 'JOB_ID' in os.environ.keys():
-            job_id = os.environ['HOME']
+        if "JOB_ID" in os.environ.keys():
+            job_id = os.environ["HOME"]
         else:
             job_id = 0
         self.args.output_dir = self.args.output_dir.replace("%j", str(job_id))
@@ -57,9 +56,10 @@ def main():
     assert os.path.exists(args.config_file), "Configuration file does not exist!"
     # submit_jobs(Trainer, args, name="dinov2:train")
     from dinov2.train import main as train_main
+
     train_main(args)
 
-    #Trainer(args)
+    # Trainer(args)
     return 0
 
 

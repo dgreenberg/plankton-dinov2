@@ -8,14 +8,21 @@ try:
 except ImportError:
     print("apex is not installed")
 
-from mmcv.runner import OptimizerHook, HOOKS
+from mmcv.runner import HOOKS, OptimizerHook
 
 
 @HOOKS.register_module()
 class DistOptimizerHook(OptimizerHook):
     """Optimizer hook for distributed training."""
 
-    def __init__(self, update_interval=1, grad_clip=None, coalesce=True, bucket_size_mb=-1, use_fp16=False):
+    def __init__(
+        self,
+        update_interval=1,
+        grad_clip=None,
+        coalesce=True,
+        bucket_size_mb=-1,
+        use_fp16=False,
+    ):
         self.grad_clip = grad_clip
         self.coalesce = coalesce
         self.bucket_size_mb = bucket_size_mb
@@ -29,7 +36,9 @@ class DistOptimizerHook(OptimizerHook):
         runner.outputs["loss"] /= self.update_interval
         if self.use_fp16:
             # runner.outputs['loss'].backward()
-            with apex.amp.scale_loss(runner.outputs["loss"], runner.optimizer) as scaled_loss:
+            with apex.amp.scale_loss(
+                runner.outputs["loss"], runner.optimizer
+            ) as scaled_loss:
                 scaled_loss.backward()
         else:
             runner.outputs["loss"].backward()

@@ -43,7 +43,9 @@ def dice_loss(pred, target, weight=None, eps=1e-3, reduction="mean", avg_factor=
     return loss
 
 
-def naive_dice_loss(pred, target, weight=None, eps=1e-3, reduction="mean", avg_factor=None):
+def naive_dice_loss(
+    pred, target, weight=None, eps=1e-3, reduction="mean", avg_factor=None
+):
     """Calculate naive dice loss, the coefficient in the denominator is the
     first power instead of the second power.
 
@@ -77,7 +79,15 @@ def naive_dice_loss(pred, target, weight=None, eps=1e-3, reduction="mean", avg_f
 
 @LOSSES.register_module(force=True)
 class DiceLoss(nn.Module):
-    def __init__(self, use_sigmoid=True, activate=True, reduction="mean", naive_dice=False, loss_weight=1.0, eps=1e-3):
+    def __init__(
+        self,
+        use_sigmoid=True,
+        activate=True,
+        reduction="mean",
+        naive_dice=False,
+        loss_weight=1.0,
+        eps=1e-3,
+    ):
         """Dice Loss, there are two forms of dice loss is supported:
 
             - the one proposed in `V-Net: Fully Convolutional Neural
@@ -113,7 +123,9 @@ class DiceLoss(nn.Module):
         self.eps = eps
         self.activate = activate
 
-    def forward(self, pred, target, weight=None, reduction_override=None, avg_factor=None):
+    def forward(
+        self, pred, target, weight=None, reduction_override=None, avg_factor=None
+    ):
         """Forward function.
 
         Args:
@@ -143,11 +155,21 @@ class DiceLoss(nn.Module):
 
         if self.naive_dice:
             loss = self.loss_weight * naive_dice_loss(
-                pred, target, weight, eps=self.eps, reduction=reduction, avg_factor=avg_factor
+                pred,
+                target,
+                weight,
+                eps=self.eps,
+                reduction=reduction,
+                avg_factor=avg_factor,
             )
         else:
             loss = self.loss_weight * dice_loss(
-                pred, target, weight, eps=self.eps, reduction=reduction, avg_factor=avg_factor
+                pred,
+                target,
+                weight,
+                eps=self.eps,
+                reduction=reduction,
+                avg_factor=avg_factor,
             )
 
         return loss

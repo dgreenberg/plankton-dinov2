@@ -74,7 +74,10 @@ class BaseDepther(BaseModule, metaclass=ABCMeta):
                 raise TypeError(f"{name} must be a list, but got " f"{type(var)}")
         num_augs = len(imgs)
         if num_augs != len(img_metas):
-            raise ValueError(f"num of augmentations ({len(imgs)}) != " f"num of image meta ({len(img_metas)})")
+            raise ValueError(
+                f"num of augmentations ({len(imgs)}) != "
+                f"num of image meta ({len(img_metas)})"
+            )
         # all images in the same aug batch all of the same ori_shape and pad
         # shape
         for img_meta in img_metas:
@@ -145,7 +148,12 @@ class BaseDepther(BaseModule, metaclass=ABCMeta):
 
         loss, log_vars = self._parse_losses(real_losses)
 
-        outputs = dict(loss=loss, log_vars=log_vars, num_samples=len(data_batch["img_metas"]), log_imgs=log_imgs)
+        outputs = dict(
+            loss=loss,
+            log_vars=log_vars,
+            num_samples=len(data_batch["img_metas"]),
+            log_imgs=log_imgs,
+        )
 
         return outputs
 

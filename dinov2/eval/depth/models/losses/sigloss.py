@@ -24,7 +24,13 @@ class SigLoss(nn.Module):
     """
 
     def __init__(
-        self, valid_mask=True, loss_weight=1.0, max_depth=None, warm_up=False, warm_iter=100, loss_name="sigloss"
+        self,
+        valid_mask=True,
+        loss_weight=1.0,
+        max_depth=None,
+        warm_up=False,
+        warm_iter=100,
+        loss_name="sigloss",
     ):
         super(SigLoss, self).__init__()
         self.valid_mask = valid_mask

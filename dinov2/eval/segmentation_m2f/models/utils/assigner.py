@@ -74,7 +74,16 @@ class MaskHungarianAssigner(BaseAssigner):
         self.dice_cost = build_match_cost(dice_cost)
         self.mask_cost = build_match_cost(mask_cost)
 
-    def assign(self, cls_pred, mask_pred, gt_labels, gt_masks, img_meta, gt_masks_ignore=None, eps=1e-7):
+    def assign(
+        self,
+        cls_pred,
+        mask_pred,
+        gt_labels,
+        gt_masks,
+        img_meta,
+        gt_masks_ignore=None,
+        eps=1e-7,
+    ):
         """Computes one-to-one matching based on the weighted costs.
 
         This method assign each query prediction to a ground truth or
@@ -105,7 +114,9 @@ class MaskHungarianAssigner(BaseAssigner):
         Returns:
             :obj:`AssignResult`: The assigned result.
         """
-        assert gt_masks_ignore is None, "Only case when gt_masks_ignore is None is supported."
+        assert (
+            gt_masks_ignore is None
+        ), "Only case when gt_masks_ignore is None is supported."
         num_gts, num_queries = gt_labels.shape[0], cls_pred.shape[0]
 
         # 1. assign -1 by default
@@ -142,7 +153,9 @@ class MaskHungarianAssigner(BaseAssigner):
         # 3. do Hungarian matching on CPU using linear_sum_assignment
         cost = cost.detach().cpu()
         if linear_sum_assignment is None:
-            raise ImportError('Please run "pip install scipy" ' "to install scipy first.")
+            raise ImportError(
+                'Please run "pip install scipy" ' "to install scipy first."
+            )
 
         matched_row_inds, matched_col_inds = linear_sum_assignment(cost)
         matched_row_inds = torch.from_numpy(matched_row_inds).to(cls_pred.device)

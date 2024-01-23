@@ -32,22 +32,41 @@ def get_reference_points(spatial_shapes, device):
 def deform_inputs(x, patch_size):
     bs, c, h, w = x.shape
     spatial_shapes = torch.as_tensor(
-        [(h // 8, w // 8), (h // 16, w // 16), (h // 32, w // 32)], dtype=torch.long, device=x.device
+        [(h // 8, w // 8), (h // 16, w // 16), (h // 32, w // 32)],
+        dtype=torch.long,
+        device=x.device,
     )
-    level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-    reference_points = get_reference_points([(h // patch_size, w // patch_size)], x.device)
+    level_start_index = torch.cat(
+        (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
+    )
+    reference_points = get_reference_points(
+        [(h // patch_size, w // patch_size)], x.device
+    )
     deform_inputs1 = [reference_points, spatial_shapes, level_start_index]
 
-    spatial_shapes = torch.as_tensor([(h // patch_size, w // patch_size)], dtype=torch.long, device=x.device)
-    level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
-    reference_points = get_reference_points([(h // 8, w // 8), (h // 16, w // 16), (h // 32, w // 32)], x.device)
+    spatial_shapes = torch.as_tensor(
+        [(h // patch_size, w // patch_size)], dtype=torch.long, device=x.device
+    )
+    level_start_index = torch.cat(
+        (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
+    )
+    reference_points = get_reference_points(
+        [(h // 8, w // 8), (h // 16, w // 16), (h // 32, w // 32)], x.device
+    )
     deform_inputs2 = [reference_points, spatial_shapes, level_start_index]
 
     return deform_inputs1, deform_inputs2
 
 
 class ConvFFN(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.GELU, drop=0.0):
+    def __init__(
+        self,
+        in_features,
+        hidden_features=None,
+        out_features=None,
+        act_layer=nn.GELU,
+        drop=0.0,
+    ):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -104,20 +123,32 @@ class Extractor(nn.Module):
         self.query_norm = norm_layer(dim)
         self.feat_norm = norm_layer(dim)
         self.attn = MSDeformAttn(
-            d_model=dim, n_levels=n_levels, n_heads=num_heads, n_points=n_points, ratio=deform_ratio
+            d_model=dim,
+            n_levels=n_levels,
+            n_heads=num_heads,
+            n_points=n_points,
+            ratio=deform_ratio,
         )
         self.with_cffn = with_cffn
         self.with_cp = with_cp
         if with_cffn:
-            self.ffn = ConvFFN(in_features=dim, hidden_features=int(dim * cffn_ratio), drop=drop)
+            self.ffn = ConvFFN(
+                in_features=dim, hidden_features=int(dim * cffn_ratio), drop=drop
+            )
             self.ffn_norm = norm_layer(dim)
             self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
-    def forward(self, query, reference_points, feat, spatial_shapes, level_start_index, H, W):
+    def forward(
+        self, query, reference_points, feat, spatial_shapes, level_start_index, H, W
+    ):
         def _inner_forward(query, feat):
-
             attn = self.attn(
-                self.query_norm(query), reference_points, self.feat_norm(feat), spatial_shapes, level_start_index, None
+                self.query_norm(query),
+                reference_points,
+                self.feat_norm(feat),
+                spatial_shapes,
+                level_start_index,
+                None,
             )
             query = query + attn
 
@@ -150,15 +181,23 @@ class Injector(nn.Module):
         self.query_norm = norm_layer(dim)
         self.feat_norm = norm_layer(dim)
         self.attn = MSDeformAttn(
-            d_model=dim, n_levels=n_levels, n_heads=num_heads, n_points=n_points, ratio=deform_ratio
+            d_model=dim,
+            n_levels=n_levels,
+            n_heads=num_heads,
+            n_points=n_points,
+            ratio=deform_ratio,
         )
         self.gamma = nn.Parameter(init_values * torch.ones((dim)), requires_grad=True)
 
     def forward(self, query, reference_points, feat, spatial_shapes, level_start_index):
         def _inner_forward(query, feat):
-
             attn = self.attn(
-                self.query_norm(query), reference_points, self.feat_norm(feat), spatial_shapes, level_start_index, None
+                self.query_norm(query),
+                reference_points,
+                self.feat_norm(feat),
+                spatial_shapes,
+                level_start_index,
+                None,
             )
             return query + self.gamma * attn
 
@@ -232,7 +271,9 @@ class InteractionBlock(nn.Module):
         else:
             self.extra_extractors = None
 
-    def forward(self, x, c, blocks, deform_inputs1, deform_inputs2, H_c, W_c, H_toks, W_toks):
+    def forward(
+        self, x, c, blocks, deform_inputs1, deform_inputs2, H_c, W_c, H_toks, W_toks
+    ):
         x = self.injector(
             query=x,
             reference_points=deform_inputs1[0],
@@ -327,7 +368,19 @@ class InteractionBlockWithCls(nn.Module):
         else:
             self.extra_extractors = None
 
-    def forward(self, x, c, cls, blocks, deform_inputs1, deform_inputs2, H_c, W_c, H_toks, W_toks):
+    def forward(
+        self,
+        x,
+        c,
+        cls,
+        blocks,
+        deform_inputs1,
+        deform_inputs2,
+        H_c,
+        W_c,
+        H_toks,
+        W_toks,
+    ):
         x = self.injector(
             query=x,
             reference_points=deform_inputs1[0],
@@ -381,10 +434,14 @@ class SpatialPriorModule(nn.Module):
                 nn.Conv2d(3, inplanes, kernel_size=3, stride=2, padding=1, bias=False),
                 nn.SyncBatchNorm(inplanes),
                 nn.ReLU(inplace=True),
-                nn.Conv2d(inplanes, inplanes, kernel_size=3, stride=1, padding=1, bias=False),
+                nn.Conv2d(
+                    inplanes, inplanes, kernel_size=3, stride=1, padding=1, bias=False
+                ),
                 nn.SyncBatchNorm(inplanes),
                 nn.ReLU(inplace=True),
-                nn.Conv2d(inplanes, inplanes, kernel_size=3, stride=1, padding=1, bias=False),
+                nn.Conv2d(
+                    inplanes, inplanes, kernel_size=3, stride=1, padding=1, bias=False
+                ),
                 nn.SyncBatchNorm(inplanes),
                 nn.ReLU(inplace=True),
                 nn.MaxPool2d(kernel_size=3, stride=2, padding=1),
@@ -392,29 +449,58 @@ class SpatialPriorModule(nn.Module):
         )
         self.conv2 = nn.Sequential(
             *[
-                nn.Conv2d(inplanes, 2 * inplanes, kernel_size=3, stride=2, padding=1, bias=False),
+                nn.Conv2d(
+                    inplanes,
+                    2 * inplanes,
+                    kernel_size=3,
+                    stride=2,
+                    padding=1,
+                    bias=False,
+                ),
                 nn.SyncBatchNorm(2 * inplanes),
                 nn.ReLU(inplace=True),
             ]
         )
         self.conv3 = nn.Sequential(
             *[
-                nn.Conv2d(2 * inplanes, 4 * inplanes, kernel_size=3, stride=2, padding=1, bias=False),
+                nn.Conv2d(
+                    2 * inplanes,
+                    4 * inplanes,
+                    kernel_size=3,
+                    stride=2,
+                    padding=1,
+                    bias=False,
+                ),
                 nn.SyncBatchNorm(4 * inplanes),
                 nn.ReLU(inplace=True),
             ]
         )
         self.conv4 = nn.Sequential(
             *[
-                nn.Conv2d(4 * inplanes, 4 * inplanes, kernel_size=3, stride=2, padding=1, bias=False),
+                nn.Conv2d(
+                    4 * inplanes,
+                    4 * inplanes,
+                    kernel_size=3,
+                    stride=2,
+                    padding=1,
+                    bias=False,
+                ),
                 nn.SyncBatchNorm(4 * inplanes),
                 nn.ReLU(inplace=True),
             ]
         )
-        self.fc1 = nn.Conv2d(inplanes, embed_dim, kernel_size=1, stride=1, padding=0, bias=True)
-        self.fc2 = nn.Conv2d(2 * inplanes, embed_dim, kernel_size=1, stride=1, padding=0, bias=True)
-        self.fc3 = nn.Conv2d(4 * inplanes, embed_dim, kernel_size=1, stride=1, padding=0, bias=True)
-        self.fc4 = nn.Conv2d(4 * inplanes, embed_dim, kernel_size=1, stride=1, padding=0, bias=True)
+        self.fc1 = nn.Conv2d(
+            inplanes, embed_dim, kernel_size=1, stride=1, padding=0, bias=True
+        )
+        self.fc2 = nn.Conv2d(
+            2 * inplanes, embed_dim, kernel_size=1, stride=1, padding=0, bias=True
+        )
+        self.fc3 = nn.Conv2d(
+            4 * inplanes, embed_dim, kernel_size=1, stride=1, padding=0, bias=True
+        )
+        self.fc4 = nn.Conv2d(
+            4 * inplanes, embed_dim, kernel_size=1, stride=1, padding=0, bias=True
+        )
 
     def forward(self, x):
         def _inner_forward(x):

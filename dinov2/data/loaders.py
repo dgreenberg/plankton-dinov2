@@ -12,6 +12,7 @@ from torch.utils.data import Sampler
 
 from .datasets import ImageNet, ImageNet22k
 from .datasets.hdf5_dataset import HDF5Dataset
+from .datasets.lmdb_dataset import LMDBDataset
 from .samplers import EpochSampler, InfiniteSampler, ShardedInfiniteSampler
 
 logger = logging.getLogger("dinov2")
@@ -29,7 +30,10 @@ def _make_bool_str(b: bool) -> str:
     return "yes" if b else "no"
 
 
-def _make_sample_transform(image_transform: Optional[Callable] = None, target_transform: Optional[Callable] = None):
+def _make_sample_transform(
+    image_transform: Optional[Callable] = None,
+    target_transform: Optional[Callable] = None,
+):
     def transform(sample):
         image, target = sample
         if image_transform is not None:
@@ -52,20 +56,21 @@ def _parse_dataset_str(dataset_str: str):
         assert key in ("root", "extra", "split", "do_short_run")
         kwargs[key] = value
 
+    if "split" in kwargs:
+        kwargs["split"] = ImageNet.Split[kwargs["split"]]
     if name == "ImageNet":
         class_ = ImageNet
-        if "split" in kwargs:
-            kwargs["split"] = ImageNet.Split[kwargs["split"]]
     elif name == "ImageNet22k":
         class_ = ImageNet22k
     elif name == "HDF5Dataset":
-        if 'do_short_run' in kwargs.keys():
-            kwargs['do_short_run']=True
+        if "do_short_run" in kwargs.keys():
+            kwargs["do_short_run"] = True
         else:
-            kwargs['do_short_run']=False
+            kwargs["do_short_run"] = False
         class_ = HDF5Dataset
-        if "split" in kwargs:
-            kwargs["split"] = HDF5Dataset.Split[kwargs["split"]]
+    elif name == "LMDBDataset":
+        class_ = LMDBDataset
+
     else:
         raise ValueError(f'Unsupported dataset "{name}"')
 
@@ -77,6 +82,8 @@ def make_dataset(
     dataset_str: str,
     transform: Optional[Callable] = None,
     target_transform: Optional[Callable] = None,
+    with_targets: bool = False,
+    cache_dataset: bool = False,
 ):
     """
     Creates a dataset with the specified parameters.
@@ -92,8 +99,14 @@ def make_dataset(
     logger.info(f'using dataset: "{dataset_str}"')
 
     class_, kwargs = _parse_dataset_str(dataset_str)
-    print('Dataset kwargs', kwargs)
-    dataset = class_(transform=transform, target_transform=target_transform, **kwargs)
+    print("Dataset kwargs", kwargs)
+    dataset = class_(
+        transform=transform,
+        target_transform=target_transform,
+        with_targets=with_targets,
+        is_cached=cache_dataset,
+        **kwargs,
+    )
 
     logger.info(f"# of dataset samples: {len(dataset):,d}")
 

@@ -7,13 +7,12 @@ import logging
 import os
 import sys
 
-from dinov2.train import get_args_parser as get_train_args_parser
 from dinov2.run.submit import get_args_parser
+from dinov2.train import get_args_parser as get_train_args_parser
 from dinov2.train import main as train_main
 
-
-
 logger = logging.getLogger("dinov2")
+
 
 def main():
     description = "Submitit launcher for DINOv2 training"
@@ -22,11 +21,11 @@ def main():
     args_parser = get_args_parser(description=description, parents=parents)
     args = args_parser.parse_args()
 
-    if 'JOB_ID' in os.environ.keys():
-        job_id = os.environ['JOB_ID']
+    if "JOB_ID" in os.environ.keys():
+        job_id = os.environ["JOB_ID"]
     else:
         job_id = 0
-    args.output_dir = args.output_dir.replace("%j", str(job_id))
+    # args.output_dir = args.output_dir.replace("%j", str(job_id))
 
     assert os.path.exists(args.config_file), "Configuration file does not exist!"
     train_main(args)

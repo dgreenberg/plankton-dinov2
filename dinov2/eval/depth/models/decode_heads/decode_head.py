@@ -89,12 +89,18 @@ class DepthBaseDecodeHead(BaseModule, metaclass=ABCMeta):
 
         if self.classify:
             assert bins_strategy in ["UD", "SID"], "Support bins_strategy: UD, SID"
-            assert norm_strategy in ["linear", "softmax", "sigmoid"], "Support norm_strategy: linear, softmax, sigmoid"
+            assert norm_strategy in [
+                "linear",
+                "softmax",
+                "sigmoid",
+            ], "Support norm_strategy: linear, softmax, sigmoid"
 
             self.bins_strategy = bins_strategy
             self.norm_strategy = norm_strategy
             self.softmax = nn.Softmax(dim=1)
-            self.conv_depth = nn.Conv2d(channels, n_bins, kernel_size=3, padding=1, stride=1)
+            self.conv_depth = nn.Conv2d(
+                channels, n_bins, kernel_size=3, padding=1, stride=1
+            )
         else:
             self.conv_depth = nn.Conv2d(channels, 1, kernel_size=3, padding=1, stride=1)
 
@@ -158,9 +164,13 @@ class DepthBaseDecodeHead(BaseModule, metaclass=ABCMeta):
             logit = self.conv_depth(feat)
 
             if self.bins_strategy == "UD":
-                bins = torch.linspace(self.min_depth, self.max_depth, self.n_bins, device=feat.device)
+                bins = torch.linspace(
+                    self.min_depth, self.max_depth, self.n_bins, device=feat.device
+                )
             elif self.bins_strategy == "SID":
-                bins = torch.logspace(self.min_depth, self.max_depth, self.n_bins, device=feat.device)
+                bins = torch.logspace(
+                    self.min_depth, self.max_depth, self.n_bins, device=feat.device
+                )
 
             # following Adabins, default linear
             if self.norm_strategy == "linear":
@@ -188,7 +198,11 @@ class DepthBaseDecodeHead(BaseModule, metaclass=ABCMeta):
         """Compute depth loss."""
         loss = dict()
         depth_pred = resize(
-            input=depth_pred, size=depth_gt.shape[2:], mode="bilinear", align_corners=self.align_corners, warning=False
+            input=depth_pred,
+            size=depth_gt.shape[2:],
+            mode="bilinear",
+            align_corners=self.align_corners,
+            warning=False,
         )
         if not isinstance(self.loss_decode, nn.ModuleList):
             losses_decode = [self.loss_decode]
@@ -222,4 +236,8 @@ class DepthBaseDecodeHead(BaseModule, metaclass=ABCMeta):
         depth_pred_color = copy.deepcopy(depth_pred.detach().cpu())
         depth_gt_color = copy.deepcopy(depth_gt.detach().cpu())
 
-        return {"img_rgb": show_img, "img_depth_pred": depth_pred_color, "img_depth_gt": depth_gt_color}
+        return {
+            "img_rgb": show_img,
+            "img_depth_pred": depth_pred_color,
+            "img_depth_gt": depth_gt_color,
+        }

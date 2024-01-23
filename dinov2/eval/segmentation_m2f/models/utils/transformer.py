@@ -13,8 +13,16 @@ import torch.nn.functional as F
 import torch.utils.checkpoint as cp
 from mmcv.cnn import Linear, build_activation_layer, build_norm_layer, xavier_init
 from mmcv.cnn.bricks.drop import build_dropout
-from mmcv.cnn.bricks.registry import FEEDFORWARD_NETWORK, TRANSFORMER_LAYER, TRANSFORMER_LAYER_SEQUENCE
-from mmcv.cnn.bricks.transformer import BaseTransformerLayer, TransformerLayerSequence, build_transformer_layer_sequence
+from mmcv.cnn.bricks.registry import (
+    FEEDFORWARD_NETWORK,
+    TRANSFORMER_LAYER,
+    TRANSFORMER_LAYER_SEQUENCE,
+)
+from mmcv.cnn.bricks.transformer import (
+    BaseTransformerLayer,
+    TransformerLayerSequence,
+    build_transformer_layer_sequence,
+)
 from mmcv.runner.base_module import BaseModule, Sequential
 from mmcv.utils import deprecated_api_warning, to_2tuple
 from torch.nn.init import normal_
@@ -64,7 +72,6 @@ class AdaptivePadding(nn.Module):
     """
 
     def __init__(self, kernel_size=1, stride=1, dilation=1, padding="corner"):
-
         super(AdaptivePadding, self).__init__()
 
         assert padding in ("same", "corner")
@@ -85,8 +92,14 @@ class AdaptivePadding(nn.Module):
         stride_h, stride_w = self.stride
         output_h = math.ceil(input_h / stride_h)
         output_w = math.ceil(input_w / stride_w)
-        pad_h = max((output_h - 1) * stride_h + (kernel_h - 1) * self.dilation[0] + 1 - input_h, 0)
-        pad_w = max((output_w - 1) * stride_w + (kernel_w - 1) * self.dilation[1] + 1 - input_w, 0)
+        pad_h = max(
+            (output_h - 1) * stride_h + (kernel_h - 1) * self.dilation[0] + 1 - input_h,
+            0,
+        )
+        pad_w = max(
+            (output_w - 1) * stride_w + (kernel_w - 1) * self.dilation[1] + 1 - input_w,
+            0,
+        )
         return pad_h, pad_w
 
     def forward(self, x):
@@ -95,7 +108,9 @@ class AdaptivePadding(nn.Module):
             if self.padding == "corner":
                 x = F.pad(x, [0, pad_w, 0, pad_h])
             elif self.padding == "same":
-                x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2])
+                x = F.pad(
+                    x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2]
+                )
         return x
 
 
@@ -156,7 +171,10 @@ class PatchMerging(BaseModule):
 
         if isinstance(padding, str):
             self.adap_padding = AdaptivePadding(
-                kernel_size=kernel_size, stride=stride, dilation=dilation, padding=padding
+                kernel_size=kernel_size,
+                stride=stride,
+                dilation=dilation,
+                padding=padding,
             )
             # disable the padding of unfold
             padding = 0
@@ -164,7 +182,9 @@ class PatchMerging(BaseModule):
             self.adap_padding = None
 
         padding = to_2tuple(padding)
-        self.sampler = nn.Unfold(kernel_size=kernel_size, dilation=dilation, padding=padding, stride=stride)
+        self.sampler = nn.Unfold(
+            kernel_size=kernel_size, dilation=dilation, padding=padding, stride=stride
+        )
 
         sample_dim = kernel_size[0] * kernel_size[1] * in_channels
 
@@ -190,7 +210,9 @@ class PatchMerging(BaseModule):
                     (Merged_H, Merged_W).
         """
         B, L, C = x.shape
-        assert isinstance(input_size, Sequence), f"Expect " f"input_size is " f"`Sequence` " f"but get {input_size}"
+        assert isinstance(input_size, Sequence), (
+            f"Expect " f"input_size is " f"`Sequence` " f"but get {input_size}"
+        )
 
         H, W = input_size
         assert L == H * W, "input feature has wrong size"
@@ -207,10 +229,16 @@ class PatchMerging(BaseModule):
         # if kernel_size=2 and stride=2, x should has shape (B, 4*C, H/2*W/2)
 
         out_h = (
-            H + 2 * self.sampler.padding[0] - self.sampler.dilation[0] * (self.sampler.kernel_size[0] - 1) - 1
+            H
+            + 2 * self.sampler.padding[0]
+            - self.sampler.dilation[0] * (self.sampler.kernel_size[0] - 1)
+            - 1
         ) // self.sampler.stride[0] + 1
         out_w = (
-            W + 2 * self.sampler.padding[1] - self.sampler.dilation[1] * (self.sampler.kernel_size[1] - 1) - 1
+            W
+            + 2 * self.sampler.padding[1]
+            - self.sampler.dilation[1] * (self.sampler.kernel_size[1] - 1)
+            - 1
         ) // self.sampler.stride[1] + 1
 
         output_size = (out_h, out_w)
@@ -261,7 +289,9 @@ class FFN(BaseModule):
             Default: None.
     """
 
-    @deprecated_api_warning({"dropout": "ffn_drop", "add_residual": "add_identity"}, cls_name="FFN")
+    @deprecated_api_warning(
+        {"dropout": "ffn_drop", "add_residual": "add_identity"}, cls_name="FFN"
+    )
     def __init__(
         self,
         embed_dims=256,
@@ -286,12 +316,20 @@ class FFN(BaseModule):
         layers = []
         in_channels = embed_dims
         for _ in range(num_fcs - 1):
-            layers.append(Sequential(Linear(in_channels, feedforward_channels), self.activate, nn.Dropout(ffn_drop)))
+            layers.append(
+                Sequential(
+                    Linear(in_channels, feedforward_channels),
+                    self.activate,
+                    nn.Dropout(ffn_drop),
+                )
+            )
             in_channels = feedforward_channels
         layers.append(Linear(feedforward_channels, embed_dims))
         layers.append(nn.Dropout(ffn_drop))
         self.layers = Sequential(*layers)
-        self.dropout_layer = build_dropout(dropout_layer) if dropout_layer else torch.nn.Identity()
+        self.dropout_layer = (
+            build_dropout(dropout_layer) if dropout_layer else torch.nn.Identity()
+        )
         self.add_identity = add_identity
 
     @deprecated_api_warning({"residual": "identity"}, cls_name="FFN")
@@ -372,9 +410,17 @@ class DetrTransformerEncoder(TransformerLayerSequence):
     def __init__(self, *args, post_norm_cfg=dict(type="LN"), **kwargs):
         super(DetrTransformerEncoder, self).__init__(*args, **kwargs)
         if post_norm_cfg is not None:
-            self.post_norm = build_norm_layer(post_norm_cfg, self.embed_dims)[1] if self.pre_norm else None
+            self.post_norm = (
+                build_norm_layer(post_norm_cfg, self.embed_dims)[1]
+                if self.pre_norm
+                else None
+            )
         else:
-            assert not self.pre_norm, f"Use prenorm in " f"{self.__class__.__name__}," f"Please specify post_norm_cfg"
+            assert not self.pre_norm, (
+                f"Use prenorm in "
+                f"{self.__class__.__name__},"
+                f"Please specify post_norm_cfg"
+            )
             self.post_norm = None
 
     def forward(self, *args, **kwargs):
@@ -399,8 +445,9 @@ class DetrTransformerDecoder(TransformerLayerSequence):
             `LN`.
     """
 
-    def __init__(self, *args, post_norm_cfg=dict(type="LN"), return_intermediate=False, **kwargs):
-
+    def __init__(
+        self, *args, post_norm_cfg=dict(type="LN"), return_intermediate=False, **kwargs
+    ):
         super(DetrTransformerDecoder, self).__init__(*args, **kwargs)
         self.return_intermediate = return_intermediate
         if post_norm_cfg is not None:
@@ -500,13 +547,26 @@ class Transformer(BaseModule):
         # use `view` instead of `flatten` for dynamically exporting to ONNX
         x = x.view(bs, c, -1).permute(2, 0, 1)  # [bs, c, h, w] -> [h*w, bs, c]
         pos_embed = pos_embed.view(bs, c, -1).permute(2, 0, 1)
-        query_embed = query_embed.unsqueeze(1).repeat(1, bs, 1)  # [num_query, dim] -> [num_query, bs, dim]
+        query_embed = query_embed.unsqueeze(1).repeat(
+            1, bs, 1
+        )  # [num_query, dim] -> [num_query, bs, dim]
         mask = mask.view(bs, -1)  # [bs, h, w] -> [bs, h*w]
-        memory = self.encoder(query=x, key=None, value=None, query_pos=pos_embed, query_key_padding_mask=mask)
+        memory = self.encoder(
+            query=x,
+            key=None,
+            value=None,
+            query_pos=pos_embed,
+            query_key_padding_mask=mask,
+        )
         target = torch.zeros_like(query_embed)
         # out_dec: [num_layers, num_query, bs, dim]
         out_dec = self.decoder(
-            query=target, key=memory, value=memory, key_pos=pos_embed, query_pos=query_embed, key_padding_mask=mask
+            query=target,
+            key=memory,
+            value=memory,
+            key_pos=pos_embed,
+            query_pos=query_embed,
+            key_padding_mask=mask,
         )
         out_dec = out_dec.transpose(1, 2)
         memory = memory.permute(1, 2, 0).reshape(bs, c, h, w)
@@ -524,11 +584,18 @@ class DeformableDetrTransformerDecoder(TransformerLayerSequence):
     """
 
     def __init__(self, *args, return_intermediate=False, **kwargs):
-
         super(DeformableDetrTransformerDecoder, self).__init__(*args, **kwargs)
         self.return_intermediate = return_intermediate
 
-    def forward(self, query, *args, reference_points=None, valid_ratios=None, reg_branches=None, **kwargs):
+    def forward(
+        self,
+        query,
+        *args,
+        reference_points=None,
+        valid_ratios=None,
+        reg_branches=None,
+        **kwargs,
+    ):
         """Forward function for `TransformerDecoder`.
 
         Args:
@@ -557,12 +624,17 @@ class DeformableDetrTransformerDecoder(TransformerLayerSequence):
         for lid, layer in enumerate(self.layers):
             if reference_points.shape[-1] == 4:
                 reference_points_input = (
-                    reference_points[:, :, None] * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
+                    reference_points[:, :, None]
+                    * torch.cat([valid_ratios, valid_ratios], -1)[:, None]
                 )
             else:
                 assert reference_points.shape[-1] == 2
-                reference_points_input = reference_points[:, :, None] * valid_ratios[:, None]
-            output = layer(output, *args, reference_points=reference_points_input, **kwargs)
+                reference_points_input = (
+                    reference_points[:, :, None] * valid_ratios[:, None]
+                )
+            output = layer(
+                output, *args, reference_points=reference_points_input, **kwargs
+            )
             output = output.permute(1, 0, 2)
 
             if reg_branches is not None:
@@ -573,7 +645,9 @@ class DeformableDetrTransformerDecoder(TransformerLayerSequence):
                 else:
                     assert reference_points.shape[-1] == 2
                     new_reference_points = tmp
-                    new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(reference_points)
+                    new_reference_points[..., :2] = tmp[..., :2] + inverse_sigmoid(
+                        reference_points
+                    )
                     new_reference_points = new_reference_points.sigmoid()
                 reference_points = new_reference_points.detach()
 
@@ -601,7 +675,13 @@ class DeformableDetrTransformer(Transformer):
             `as_two_stage` as True. Default: 300.
     """
 
-    def __init__(self, as_two_stage=False, num_feature_levels=4, two_stage_num_proposals=300, **kwargs):
+    def __init__(
+        self,
+        as_two_stage=False,
+        num_feature_levels=4,
+        two_stage_num_proposals=300,
+        **kwargs,
+    ):
         super(DeformableDetrTransformer, self).__init__(**kwargs)
         self.as_two_stage = as_two_stage
         self.num_feature_levels = num_feature_levels
@@ -611,7 +691,9 @@ class DeformableDetrTransformer(Transformer):
 
     def init_layers(self):
         """Initialize layers of the DeformableDetrTransformer."""
-        self.level_embeds = nn.Parameter(torch.Tensor(self.num_feature_levels, self.embed_dims))
+        self.level_embeds = nn.Parameter(
+            torch.Tensor(self.num_feature_levels, self.embed_dims)
+        )
 
         if self.as_two_stage:
             self.enc_output = nn.Linear(self.embed_dims, self.embed_dims)
@@ -662,7 +744,9 @@ class DeformableDetrTransformer(Transformer):
         proposals = []
         _cur = 0
         for lvl, (H, W) in enumerate(spatial_shapes):
-            mask_flatten_ = memory_padding_mask[:, _cur : (_cur + H * W)].view(N, H, W, 1)
+            mask_flatten_ = memory_padding_mask[:, _cur : (_cur + H * W)].view(
+                N, H, W, 1
+            )
             valid_H = torch.sum(~mask_flatten_[:, :, 0, 0], 1)
             valid_W = torch.sum(~mask_flatten_[:, 0, :, 0], 1)
 
@@ -672,20 +756,30 @@ class DeformableDetrTransformer(Transformer):
             )
             grid = torch.cat([grid_x.unsqueeze(-1), grid_y.unsqueeze(-1)], -1)
 
-            scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(N, 1, 1, 2)
+            scale = torch.cat([valid_W.unsqueeze(-1), valid_H.unsqueeze(-1)], 1).view(
+                N, 1, 1, 2
+            )
             grid = (grid.unsqueeze(0).expand(N, -1, -1, -1) + 0.5) / scale
             wh = torch.ones_like(grid) * 0.05 * (2.0**lvl)
             proposal = torch.cat((grid, wh), -1).view(N, -1, 4)
             proposals.append(proposal)
             _cur += H * W
         output_proposals = torch.cat(proposals, 1)
-        output_proposals_valid = ((output_proposals > 0.01) & (output_proposals < 0.99)).all(-1, keepdim=True)
+        output_proposals_valid = (
+            (output_proposals > 0.01) & (output_proposals < 0.99)
+        ).all(-1, keepdim=True)
         output_proposals = torch.log(output_proposals / (1 - output_proposals))
-        output_proposals = output_proposals.masked_fill(memory_padding_mask.unsqueeze(-1), float("inf"))
-        output_proposals = output_proposals.masked_fill(~output_proposals_valid, float("inf"))
+        output_proposals = output_proposals.masked_fill(
+            memory_padding_mask.unsqueeze(-1), float("inf")
+        )
+        output_proposals = output_proposals.masked_fill(
+            ~output_proposals_valid, float("inf")
+        )
 
         output_memory = memory
-        output_memory = output_memory.masked_fill(memory_padding_mask.unsqueeze(-1), float(0))
+        output_memory = output_memory.masked_fill(
+            memory_padding_mask.unsqueeze(-1), float(0)
+        )
         output_memory = output_memory.masked_fill(~output_proposals_valid, float(0))
         output_memory = self.enc_output_norm(self.enc_output(output_memory))
         return output_memory, output_proposals
@@ -734,18 +828,29 @@ class DeformableDetrTransformer(Transformer):
     def get_proposal_pos_embed(self, proposals, num_pos_feats=128, temperature=10000):
         """Get the position embedding of proposal."""
         scale = 2 * math.pi
-        dim_t = torch.arange(num_pos_feats, dtype=torch.float32, device=proposals.device)
+        dim_t = torch.arange(
+            num_pos_feats, dtype=torch.float32, device=proposals.device
+        )
         dim_t = temperature ** (2 * (dim_t // 2) / num_pos_feats)
         # N, L, 4
         proposals = proposals.sigmoid() * scale
         # N, L, 4, 128
         pos = proposals[:, :, :, None] / dim_t
         # N, L, 4, 64, 2
-        pos = torch.stack((pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4).flatten(2)
+        pos = torch.stack(
+            (pos[:, :, :, 0::2].sin(), pos[:, :, :, 1::2].cos()), dim=4
+        ).flatten(2)
         return pos
 
     def forward(
-        self, mlvl_feats, mlvl_masks, query_embed, mlvl_pos_embeds, reg_branches=None, cls_branches=None, **kwargs
+        self,
+        mlvl_feats,
+        mlvl_masks,
+        query_embed,
+        mlvl_pos_embeds,
+        reg_branches=None,
+        cls_branches=None,
+        **kwargs,
     ):
         """Forward function for `Transformer`.
 
@@ -801,7 +906,9 @@ class DeformableDetrTransformer(Transformer):
         mask_flatten = []
         lvl_pos_embed_flatten = []
         spatial_shapes = []
-        for lvl, (feat, mask, pos_embed) in enumerate(zip(mlvl_feats, mlvl_masks, mlvl_pos_embeds)):
+        for lvl, (feat, mask, pos_embed) in enumerate(
+            zip(mlvl_feats, mlvl_masks, mlvl_pos_embeds)
+        ):
             bs, c, h, w = feat.shape
             spatial_shape = (h, w)
             spatial_shapes.append(spatial_shape)
@@ -815,14 +922,22 @@ class DeformableDetrTransformer(Transformer):
         feat_flatten = torch.cat(feat_flatten, 1)
         mask_flatten = torch.cat(mask_flatten, 1)
         lvl_pos_embed_flatten = torch.cat(lvl_pos_embed_flatten, 1)
-        spatial_shapes = torch.as_tensor(spatial_shapes, dtype=torch.long, device=feat_flatten.device)
-        level_start_index = torch.cat((spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1]))
+        spatial_shapes = torch.as_tensor(
+            spatial_shapes, dtype=torch.long, device=feat_flatten.device
+        )
+        level_start_index = torch.cat(
+            (spatial_shapes.new_zeros((1,)), spatial_shapes.prod(1).cumsum(0)[:-1])
+        )
         valid_ratios = torch.stack([self.get_valid_ratio(m) for m in mlvl_masks], 1)
 
-        reference_points = self.get_reference_points(spatial_shapes, valid_ratios, device=feat.device)
+        reference_points = self.get_reference_points(
+            spatial_shapes, valid_ratios, device=feat.device
+        )
 
         feat_flatten = feat_flatten.permute(1, 0, 2)  # (H*W, bs, embed_dims)
-        lvl_pos_embed_flatten = lvl_pos_embed_flatten.permute(1, 0, 2)  # (H*W, bs, embed_dims)
+        lvl_pos_embed_flatten = lvl_pos_embed_flatten.permute(
+            1, 0, 2
+        )  # (H*W, bs, embed_dims)
         memory = self.encoder(
             query=feat_flatten,
             key=None,
@@ -839,17 +954,25 @@ class DeformableDetrTransformer(Transformer):
         memory = memory.permute(1, 0, 2)
         bs, _, c = memory.shape
         if self.as_two_stage:
-            output_memory, output_proposals = self.gen_encoder_output_proposals(memory, mask_flatten, spatial_shapes)
+            output_memory, output_proposals = self.gen_encoder_output_proposals(
+                memory, mask_flatten, spatial_shapes
+            )
             enc_outputs_class = cls_branches[self.decoder.num_layers](output_memory)
-            enc_outputs_coord_unact = reg_branches[self.decoder.num_layers](output_memory) + output_proposals
+            enc_outputs_coord_unact = (
+                reg_branches[self.decoder.num_layers](output_memory) + output_proposals
+            )
 
             topk = self.two_stage_num_proposals
             topk_proposals = torch.topk(enc_outputs_class[..., 0], topk, dim=1)[1]
-            topk_coords_unact = torch.gather(enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4))
+            topk_coords_unact = torch.gather(
+                enc_outputs_coord_unact, 1, topk_proposals.unsqueeze(-1).repeat(1, 1, 4)
+            )
             topk_coords_unact = topk_coords_unact.detach()
             reference_points = topk_coords_unact.sigmoid()
             init_reference_out = reference_points
-            pos_trans_out = self.pos_trans_norm(self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact)))
+            pos_trans_out = self.pos_trans_norm(
+                self.pos_trans(self.get_proposal_pos_embed(topk_coords_unact))
+            )
             query_pos, query = torch.split(pos_trans_out, c, dim=2)
         else:
             query_pos, query = torch.split(query_embed, c, dim=1)
@@ -878,7 +1001,13 @@ class DeformableDetrTransformer(Transformer):
 
         inter_references_out = inter_references
         if self.as_two_stage:
-            return inter_states, init_reference_out, inter_references_out, enc_outputs_class, enc_outputs_coord_unact
+            return (
+                inter_states,
+                init_reference_out,
+                inter_references_out,
+                enc_outputs_class,
+                enc_outputs_coord_unact,
+            )
         return inter_states, init_reference_out, inter_references_out, None, None
 
 
@@ -933,7 +1062,9 @@ class DynamicConv(BaseModule):
 
         self.num_params_in = self.in_channels * self.feat_channels
         self.num_params_out = self.out_channels * self.feat_channels
-        self.dynamic_layer = nn.Linear(self.in_channels, self.num_params_in + self.num_params_out)
+        self.dynamic_layer = nn.Linear(
+            self.in_channels, self.num_params_in + self.num_params_out
+        )
 
         self.norm_in = build_norm_layer(norm_cfg, self.feat_channels)[1]
         self.norm_out = build_norm_layer(norm_cfg, self.out_channels)[1]
@@ -965,8 +1096,12 @@ class DynamicConv(BaseModule):
         input_feature = input_feature.permute(1, 0, 2)
         parameters = self.dynamic_layer(param_feature)
 
-        param_in = parameters[:, : self.num_params_in].view(-1, self.in_channels, self.feat_channels)
-        param_out = parameters[:, -self.num_params_out :].view(-1, self.feat_channels, self.out_channels)
+        param_in = parameters[:, : self.num_params_in].view(
+            -1, self.in_channels, self.feat_channels
+        )
+        param_out = parameters[:, -self.num_params_out :].view(
+            -1, self.feat_channels, self.out_channels
+        )
 
         # input_feature has shape (num_all_proposals, H*W, in_channels)
         # param_in has shape (num_all_proposals, in_channels, feat_channels)

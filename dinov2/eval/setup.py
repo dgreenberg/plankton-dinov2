@@ -9,9 +9,10 @@ from typing import Any, List, Optional, Tuple
 import torch
 import torch.backends.cudnn as cudnn
 
+import dinov2.utils.utils as dinov2_utils
+from dinov2.distributed import _restrict_print_to_main_process
 from dinov2.models import build_model_from_cfg
 from dinov2.utils.config import setup
-import dinov2.utils.utils as dinov2_utils
 
 
 def get_args_parser(
@@ -40,17 +41,24 @@ def get_args_parser(
         type=str,
         help="Output directory to write results and logs",
     )
+
     parser.add_argument(
-        "--opts",
-        help="Extra configuration options",
-        default=[],
-        nargs="+",
+        "opts",
+        help="""
+        Modify config options at the end of the command. For Yacs configs, use
+        space-separated "PATH.KEY VALUE" pairs.
+        For python-based LazyConfig, use "path.key=value".
+        """.strip(),
+        default=None,
+        nargs=argparse.REMAINDER,
     )
     return parser
 
 
 def get_autocast_dtype(config):
-    teacher_dtype_str = config.compute_precision.teacher.backbone.mixed_precision.param_dtype
+    teacher_dtype_str = (
+        config.compute_precision.teacher.backbone.mixed_precision.param_dtype
+    )
     if teacher_dtype_str == "fp16":
         return torch.half
     elif teacher_dtype_str == "bf16":
@@ -72,4 +80,5 @@ def setup_and_build_model(args) -> Tuple[Any, torch.dtype]:
     config = setup(args)
     model = build_model_for_eval(config, args.pretrained_weights)
     autocast_dtype = get_autocast_dtype(config)
+    _restrict_print_to_main_process
     return model, autocast_dtype

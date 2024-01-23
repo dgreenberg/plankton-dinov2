@@ -4,19 +4,18 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import os
+from functools import partial
 from typing import Any
 
 import torch
-import dinov2.distributed as distributed
-from functools import partial
 from fvcore.common.checkpoint import Checkpointer
 from torch.distributed.fsdp import FullyShardedDataParallel as FSDP
-from torch.distributed.fsdp import ShardingStrategy
-from torch.distributed.fsdp import MixedPrecision
-from torch.distributed.fsdp import StateDictType
+from torch.distributed.fsdp import MixedPrecision, ShardingStrategy, StateDictType
+from torch.distributed.fsdp._runtime_utils import _reshard
 from torch.distributed.fsdp.sharded_grad_scaler import ShardedGradScaler
 from torch.distributed.fsdp.wrap import ModuleWrapPolicy
-from torch.distributed.fsdp._runtime_utils import _reshard
+
+import dinov2.distributed as distributed
 
 
 def get_fsdp_wrapper(model_cfg, modules_to_wrap=set()):
@@ -42,6 +41,7 @@ def get_fsdp_wrapper(model_cfg, modules_to_wrap=set()):
 
     local_rank = distributed.get_local_rank()
 
+    # modules_to_wrap is "vision_transformer.BlockChunk"
     fsdp_wrapper = partial(
         FSDP,
         sharding_strategy=sharding_strategy_config,
@@ -50,6 +50,8 @@ def get_fsdp_wrapper(model_cfg, modules_to_wrap=set()):
         sync_module_states=True,
         use_orig_params=True,
         auto_wrap_policy=ModuleWrapPolicy(modules_to_wrap),
+        # backward_prefetch=BackwardPrefetch.BACKWARD_PRE,
+        # optional, enables starting bkwd pass without waiting for fwd to finish, mem slight incr for speed
     )
     return fsdp_wrapper
 
@@ -95,12 +97,35 @@ class FSDPCheckpointer(Checkpointer):
             return
 
         data = {}
-        with FSDP.state_dict_type(self.model, StateDictType.LOCAL_STATE_DICT):
+        state_dict_type = StateDictType.FULL_STATE_DICT
+
+        # check if all BlockChunks are FSDP and Sharded
+        if (
+            distributed.get_global_size() > 1
+            and all(
+                [
+                    is_sharded_fsdp(self.model.student[k])
+                    for k in self.model.student.keys()
+                ]
+            )
+            and all(
+                [
+                    is_sharded_fsdp(self.model.teacher[k])
+                    for k in self.model.teacher.keys()
+                ]
+            )
+        ):
+            fsdp_cfg = torch.distributed.fsdp.FullStateDictConfig(
+                offload_to_cpu=True, rank0_only=True
+            )
+        else:
+            fsdp_cfg = None
+        with FSDP.state_dict_type(self.model, state_dict_type, fsdp_cfg):
             data["model"] = self.model.state_dict()
 
-        # data["model"] = self.model.state_dict()
         for key, obj in self.checkpointables.items():
             data[key] = obj.state_dict()
+
         data.update(kwargs)
 
         basename = f"{name}.{rankstr()}.pth"
@@ -108,6 +133,7 @@ class FSDPCheckpointer(Checkpointer):
         assert os.path.basename(save_file) == basename, basename
         self.logger.info("Saving checkpoint to {}".format(save_file))
         with self.path_manager.open(save_file, "wb") as f:
+            print("Saving data with keys: ", data.keys(), flush=True)
             torch.save(data, f)
         self.tag_last_checkpoint(basename)
 

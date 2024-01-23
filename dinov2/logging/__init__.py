@@ -9,11 +9,12 @@ import os
 import sys
 from typing import Optional
 
+import torch.distributed as tdist
 import wandb
 
 import dinov2.distributed as distributed
+
 from .helpers import MetricLogger, SmoothedValue
-import torch.distributed as tdist
 
 
 # So that calling _configure_logger multiple times won't add many handlers
@@ -23,6 +24,7 @@ def _configure_logger(
     *,
     level: int = logging.DEBUG,
     output: Optional[str] = None,
+    disable_prefix: bool = True,
 ):
     """
     Configure a logger.
@@ -48,9 +50,15 @@ def _configure_logger(
     #   [IWEF]yyyymmdd hh:mm:ss.uuuuuu threadid file:line] msg
     # but use a shorter timestamp and include the logger name:
     #   [IWEF]yyyymmdd hh:mm:ss logger threadid file:line] msg
-    fmt_prefix = "%(levelname).1s%(asctime)s %(process)s %(name)s %(filename)s:%(lineno)s] "
+    fmt_prefix = (
+        "%(levelname).1s%(asctime)s %(process)s %(name)s %(filename)s:%(lineno)s] "
+    )
     fmt_message = "%(message)s"
-    fmt = fmt_prefix + fmt_message
+    if not disable_prefix:
+        fmt = fmt_prefix + fmt_message
+    else:
+        fmt = ""
+
     datefmt = "%Y%m%d %H:%M:%S"
     formatter = logging.Formatter(fmt=fmt, datefmt=datefmt)
 
@@ -105,17 +113,16 @@ def setup_logging(
     if distributed.is_main_process():
         logging.captureWarnings(capture_warnings)
         _configure_logger(name, level=level, output=output)
-        if args is not None:
-            run_name = args.run_name
-        else:
-            run_name = ''
-
-        args.output_dir = os.path.join(args.output_dir, run_name)
-        os.makedirs(args.output_dir, exist_ok=True)
-        print('Output dir: ', args.output_dir)
 
         if do_eval:
-            project='dinov2_plankton_eval'
+            project = "dinov2_plankton_eval"
         else:
-            project='dinov2_plankton'
-        wandb.init(name=run_name, entity='kainmueller-lab', project=project, config=args, dir=output)
+            project = "dinov2_plankton"
+
+        wandb.init(
+            name=args.run_name,
+            entity="kainmueller-lab",
+            project=project,
+            config=args,
+            dir=output,
+        )

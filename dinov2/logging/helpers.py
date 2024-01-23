@@ -3,16 +3,15 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
-from collections import defaultdict, deque
 import datetime
 import json
 import logging
 import time
+from collections import defaultdict, deque
 
 import torch
 
 import dinov2.distributed as distributed
-
 
 logger = logging.getLogger("dinov2")
 
@@ -36,11 +35,24 @@ class MetricLogger(object):
             return self.meters[attr]
         if attr in self.__dict__:
             return self.__dict__[attr]
-        raise AttributeError("'{}' object has no attribute '{}'".format(type(self).__name__, attr))
+        raise AttributeError(
+            "'{}' object has no attribute '{}'".format(type(self).__name__, attr)
+        )
 
     def __str__(self):
         loss_str = []
         for name, meter in self.meters.items():
+            if "batch_size" in name:
+                meter = int(meter.deque[-1])
+                name = "b_s"
+            if name.endswith("crops_loss"):
+                name = name[: -(len("crops_loss") + 1)]
+            elif name.endswith("loss"):
+                name = name[: -(len("loss") + 1)]
+
+            if "last_layer_lr" in name:
+                name = "ll_lr"
+
             loss_str.append("{}: {}".format(name, str(meter)))
         return self.delimiter.join(loss_str)
 
@@ -64,7 +76,9 @@ class MetricLogger(object):
             f.write(json.dumps(dict_to_dump) + "\n")
         pass
 
-    def log_every(self, iterable, print_freq, header=None, n_iterations=None, start_iteration=0):
+    def log_every(
+        self, iterable, print_freq, header=None, n_iterations=None, start_iteration=0
+    ):
         i = start_iteration
         if not header:
             header = ""
@@ -87,7 +101,7 @@ class MetricLogger(object):
             "data: {data}",
         ]
         if torch.cuda.is_available():
-            log_list += ["max mem: {memory:.0f}"]
+            log_list += ["max mem: {memory:.0f} (mb)"]
 
         log_msg = self.delimiter.join(log_list)
         MB = 1024.0 * 1024.0
@@ -97,7 +111,9 @@ class MetricLogger(object):
             iter_time.update(time.time() - end)
             if i % print_freq == 0 or i == n_iterations - 1:
                 if self.verbose:
-                    self.dump_in_output_file(iteration=i, iter_time=iter_time.avg, data_time=data_time.avg)
+                    self.dump_in_output_file(
+                        iteration=i, iter_time=iter_time.avg, data_time=data_time.avg
+                    )
                 eta_seconds = iter_time.global_avg * (n_iterations - i)
                 eta_string = str(datetime.timedelta(seconds=int(eta_seconds)))
                 if torch.cuda.is_available():
@@ -134,7 +150,11 @@ class MetricLogger(object):
                 time_per_it = 0
             else:
                 time_per_it = total_time / n_iterations
-            logger.info("{} Total time: {} ({:.6f} s / it)".format(header, total_time_str, time_per_it))
+            logger.info(
+                "{} Total time: {} ({:.6f} s / it)".format(
+                    header, total_time_str, time_per_it
+                )
+            )
 
 
 class SmoothedValue:
