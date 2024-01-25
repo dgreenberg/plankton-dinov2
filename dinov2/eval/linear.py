@@ -569,7 +569,6 @@ def run_eval_linear(
         dataset_str=train_dataset_str,
         transform=train_transform,
     )
-    print(train_dataset.get_targets())
     training_num_classes = len(
         torch.unique(torch.Tensor(train_dataset.get_targets().astype(int)))
     )
