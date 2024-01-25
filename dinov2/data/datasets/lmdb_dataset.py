@@ -117,6 +117,8 @@ class LMDBDataset(ImageNet):
                 accumulated.append(entry)
                 global_idx += 1
 
+            if self.do_short_run:
+                accumulated = [el for el in accumulated if el["class_id"] < 5]
             # free up resources
             lmdb_cursor.close()
             lmdb_env_labels.close()
