@@ -159,12 +159,16 @@ class ImageNet(ExtendedVisionDataset):
             return None
         else:
             entries = self._get_entries()
-            class_index = entries[index]["class_index"]
+            class_index = entries[index]["class_id"]
             return int(class_index)
 
     def get_targets(self) -> Optional[np.ndarray]:
         entries = self._get_entries()
-        return None if self.split == _Split.TEST else entries["class_index"]
+        return (
+            None
+            if self.split == _Split.TEST
+            else np.array([el["class_id"] for el in entries])
+        )
 
     def get_class_id(self, index: int) -> Optional[str]:
         entries = self._get_entries()
