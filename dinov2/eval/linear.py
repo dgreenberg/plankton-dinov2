@@ -401,7 +401,7 @@ def eval_linear(
 
     for data, labels in metric_logger.log_every(
         train_data_loader,
-        10,
+        20,
         header,
         max_iter,
         start_iter,
@@ -418,7 +418,7 @@ def eval_linear(
         loss = sum(losses.values())
 
         # compute the gradients
-        optimizer.zero_grad(set_to_none=True)
+        optimizer.zero_grad()
         loss.backward()
 
         # step
