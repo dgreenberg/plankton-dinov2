@@ -105,7 +105,7 @@ class HDF5Dataset(ImageNet):
 
             # Short run, take only the first 7 classes
             if self.do_short_run:
-                entries = {k: v for k, v in entries.items() if v["class_id"] < 7}
+                entries = [el for el in entries if el["class_id"] < 5]
 
             accumulated += entries
 

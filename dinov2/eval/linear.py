@@ -334,7 +334,10 @@ def evaluate_linear_classifiers(
     max_accuracy = 0
     best_classifier = ""
     for i, (classifier_string, metric) in enumerate(results_dict_temp.items()):
-        logger.info(f"{prefixstring} -- Classifier: {classifier_string} * {metric}")
+        metrics_to_print = {k: np.round(float(v.cpu()), 4) for k, v in metric.items()}
+        logger.info(
+            f"{prefixstring} -- Classifier: {classifier_string} * {metrics_to_print}"
+        )
         if (
             best_classifier_on_val is None and metric["top-1"].item() > max_accuracy
         ) or classifier_string == best_classifier_on_val:
@@ -682,6 +685,7 @@ def run_eval_linear(
 
 def main(args):
     model, autocast_dtype = setup_and_build_model(args)
+    print(f"Output dir: {args.output_dir}")
     run_eval_linear(
         model=model,
         output_dir=args.output_dir,

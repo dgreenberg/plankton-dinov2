@@ -80,5 +80,5 @@ def setup_and_build_model(args) -> Tuple[Any, torch.dtype]:
     config = setup(args)
     model = build_model_for_eval(config, args.pretrained_weights)
     autocast_dtype = get_autocast_dtype(config)
-    _restrict_print_to_main_process
+    _restrict_print_to_main_process()
     return model, autocast_dtype
