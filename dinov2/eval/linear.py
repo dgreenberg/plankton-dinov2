@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime
 from functools import partial
 from typing import List, Optional
 
@@ -50,7 +49,7 @@ def get_args_parser(
         "--run_name",
         type=str,
         help="Name for the wandb log",
-        default=f"lin_run_{datetime.now().strftime('%d%m%Y_%H%M%S')}",
+        default="lin_run",
     )
     parser.add_argument(
         "--train-dataset",
@@ -333,7 +332,7 @@ def evaluate_linear_classifiers(
     results_dict = {}
     max_accuracy = 0
     best_classifier = ""
-    for i, (classifier_string, metric) in enumerate(results_dict_temp.items()):
+    for classifier_string, metric in results_dict_temp.items():
         metrics_to_print = {k: np.round(float(v.cpu()), 4) for k, v in metric.items()}
         logger.info(
             f"{prefixstring} -- Classifier: {classifier_string} * {metrics_to_print}"
@@ -411,7 +410,6 @@ def eval_linear(
 
         features = feature_model(data)
         outputs = linear_classifiers(features)
-
         losses = {
             f"loss_{k}": nn.CrossEntropyLoss()(v, labels) for k, v in outputs.items()
         }
@@ -638,6 +636,7 @@ def run_eval_linear(
             class_mapping = None
         test_class_mappings.append(class_mapping)
 
+    print(f" ----- OUTPUT_DIR {output_dir} ----- ")
     metrics_file_path = os.path.join(output_dir, "results_eval_linear.json")
     val_results_dict, feature_model, linear_classifiers, iteration = eval_linear(
         feature_model=feature_model,
