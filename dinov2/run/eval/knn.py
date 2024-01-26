@@ -9,16 +9,12 @@ import sys
 
 from dinov2.eval.knn import get_args_parser
 from dinov2.eval.knn import main as knn_main
-from dinov2.logging import setup_logging
 
 logger = logging.getLogger("dinov2")
 
 
 def main(args):
     assert os.path.exists(args.config_file), "Configuration file does not exist!"
-
-    print(args.output_dir)
-    setup_logging(args=args, output=args.output_dir, level=logging.INFO, do_eval=True)
     knn_main(args)
 
     return 0
