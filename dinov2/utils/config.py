@@ -72,10 +72,11 @@ def setup(args):
     """
 
     args.run_name = args.run_name + f"_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
-    # args.output_dir = os.path.join(args.output_dir, args.run_name)
-
     cfg = get_cfg_from_args(args)
-    cfg.train.output_dir = os.path.join(cfg.train.output_dir, args.run_name)
+    if len(cfg.train.output_dir) > 4:
+        cfg.train.output_dir = os.path.join(cfg.train.output_dir, args.run_name)
+    else:
+        cfg.train.output_dir = os.path.join(args.output_dir, args.run_name)
 
     os.makedirs(cfg.train.output_dir, exist_ok=True)
     default_setup(args, output_dir=cfg.train.output_dir)

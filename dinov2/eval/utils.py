@@ -7,11 +7,11 @@ import logging
 from typing import Dict, Optional
 
 import torch
-import wandb
 from torch import nn
 from torchmetrics import MetricCollection
 
 import dinov2.distributed as distributed
+import wandb
 from dinov2.data import DatasetWithEnumeratedTargets, SamplerType, make_data_loader
 from dinov2.logging import MetricLogger
 
@@ -66,7 +66,6 @@ def evaluate(
     for samples, targets, *_ in metric_logger.log_every(data_loader, 10, header):
         outputs = model(samples.to(device))
         targets = targets.to(device)
-
         if criterion is not None:
             loss = criterion(outputs, targets)
             metric_logger.update(loss=loss.item())

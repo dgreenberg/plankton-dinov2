@@ -121,23 +121,22 @@ class FSDPCheckpointer(Checkpointer):
         else:
             fsdp_cfg = None
 
-        if distributed.is_main_process():
-            with FSDP.state_dict_type(self.model, state_dict_type, fsdp_cfg):
-                data["model"] = self.model.state_dict()
+        with FSDP.state_dict_type(self.model, state_dict_type, fsdp_cfg):
+            data["model"] = self.model.state_dict()
 
-            for key, obj in self.checkpointables.items():
-                data[key] = obj.state_dict()
+        for key, obj in self.checkpointables.items():
+            data[key] = obj.state_dict()
 
-            data.update(kwargs)
+        data.update(kwargs)
 
-            basename = f"{name}.{rankstr()}.pth"
-            save_file = os.path.join(self.save_dir, basename)
-            assert os.path.basename(save_file) == basename, basename
-            self.logger.info("Saving checkpoint to {}".format(save_file))
-            with self.path_manager.open(save_file, "wb") as f:
-                print("Saving data with keys: ", data.keys(), flush=True)
-                torch.save(data, f)
-            self.tag_last_checkpoint(basename)
+        basename = f"{name}.{rankstr()}.pth"
+        save_file = os.path.join(self.save_dir, basename)
+        assert os.path.basename(save_file) == basename, basename
+        self.logger.info("Saving checkpoint to {}".format(save_file))
+        with self.path_manager.open(save_file, "wb") as f:
+            print("Saving data with keys: ", data.keys(), flush=True)
+            torch.save(data, f)
+        self.tag_last_checkpoint(basename)
 
     def load(self, *args, **kwargs):
         with FSDP.state_dict_type(self.model, StateDictType.LOCAL_STATE_DICT):

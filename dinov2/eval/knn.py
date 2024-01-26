@@ -8,7 +8,6 @@ import json
 import logging
 import os
 import sys
-from datetime import datetime
 from functools import partial
 from typing import List, Optional
 
@@ -94,7 +93,7 @@ def get_args_parser(
         "--run_name",
         type=str,
         help="Name for the wandb log",
-        default=f"knn_run_{datetime.now().strftime('%d%m%Y_%H%M%S')}",
+        default="knn_run",
     )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
