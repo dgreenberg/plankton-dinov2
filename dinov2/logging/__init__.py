@@ -9,10 +9,8 @@ import os
 import sys
 from typing import Optional
 
-import torch.distributed as tdist
-import wandb
-
 import dinov2.distributed as distributed
+import wandb
 
 from .helpers import MetricLogger, SmoothedValue
 

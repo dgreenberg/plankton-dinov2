@@ -216,6 +216,9 @@ def enable(
     """
 
     torch_env = _TorchDistributedEnvironment()
+
+    if "SLURM_JOB_ID" in os.environ.keys():
+        torch_env._set_from_slurm_env()
     torch_env.export(overwrite=overwrite)
 
     if set_cuda_current_device:
