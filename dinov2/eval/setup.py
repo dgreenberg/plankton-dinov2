@@ -75,10 +75,13 @@ def build_model_for_eval(config, pretrained_weights):
     return model
 
 
-def setup_and_build_model(args) -> Tuple[Any, torch.dtype]:
+def setup_and_build_model(args, do_eval: bool = False) -> Tuple[Any, torch.dtype]:
     cudnn.benchmark = True
-    config = setup(args)
+    config = setup(args, do_eval=do_eval)
     model = build_model_for_eval(config, args.pretrained_weights)
+    if do_eval:
+        args.output_dir_ckpt = "/".join(args.pretrained_weights.split("/")[:-1])
+
     autocast_dtype = get_autocast_dtype(config)
     _restrict_print_to_main_process()
     return model, autocast_dtype
