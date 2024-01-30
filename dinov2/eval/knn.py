@@ -21,7 +21,6 @@ from dinov2.eval.metrics import AccuracyAveraging, build_topk_accuracy_metric
 from dinov2.eval.setup import get_args_parser as get_setup_args_parser
 from dinov2.eval.setup import setup_and_build_model
 from dinov2.eval.utils import ModelWithNormalize, evaluate, extract_features
-from dinov2.logging import setup_logging
 
 logger = logging.getLogger("dinov2")
 
@@ -423,6 +422,7 @@ def eval_knn_with_model(
                 metric_log_msg += f"{metric_name}: {metric_val:.4f} "
             logger.info(metric_log_msg)
 
+    # save in ckpt dir
     metrics_file_path = os.path.join(output_dir, "results_eval_knn.json")
     with open(metrics_file_path, "a") as f:
         for k, v in results_dict.items():
@@ -434,13 +434,12 @@ def eval_knn_with_model(
 
 
 def main(args):
-    model, autocast_dtype = setup_and_build_model(args)
-    setup_logging(args=args, output=args.output_dir, level=logging.INFO, do_eval=True)
+    model, autocast_dtype = setup_and_build_model(args, do_eval=True)
 
     print("args.output_dir", args.output_dir)
     eval_knn_with_model(
         model=model,
-        output_dir=args.output_dir,
+        output_dir=args.output_dir_ckpt,
         train_dataset_str=args.train_dataset_str,
         val_dataset_str=args.val_dataset_str,
         nb_knn=args.nb_knn,

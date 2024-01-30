@@ -47,7 +47,7 @@ def get_cfg_from_args(args):
     return cfg
 
 
-def default_setup(args, output_dir):
+def default_setup(args, output_dir, do_eval: bool = False):
     distributed.enable(overwrite=True)
     seed = getattr(args, "seed", 0)
     rank = distributed.get_global_rank()
@@ -55,7 +55,7 @@ def default_setup(args, output_dir):
     global logger
 
     if distributed.is_main_process():
-        setup_logging(args=args, output=output_dir, level=logging.INFO)
+        setup_logging(args=args, output=output_dir, level=logging.INFO, do_eval=do_eval)
 
     logger = logging.getLogger("dinov2")
 
@@ -66,7 +66,7 @@ def default_setup(args, output_dir):
     )
 
 
-def setup(args):
+def setup(args, do_eval: bool = False):
     """
     Create configs and perform basic setups.
     """
@@ -79,7 +79,7 @@ def setup(args):
         cfg.train.output_dir = os.path.join(args.output_dir, args.run_name)
 
     os.makedirs(cfg.train.output_dir, exist_ok=True)
-    default_setup(args, output_dir=cfg.train.output_dir)
+    default_setup(args, output_dir=cfg.train.output_dir, do_eval=do_eval)
     apply_scaling_rules_to_cfg(cfg)
     if distributed.is_main_process():
         write_config(cfg, cfg.train.output_dir)
