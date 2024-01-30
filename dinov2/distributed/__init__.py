@@ -124,6 +124,7 @@ def _parse_slurm_node_list(s: str) -> List[str]:
                 width = len(span[0])
                 start, end = int(span[0]), int(span[1]) + 1
                 nodes.extend([prefix + f"{i:0{width}}" for i in range(start, end)])
+    print("Parsed nodes", nodes)
     return nodes
 
 
@@ -149,8 +150,9 @@ class _TorchDistributedEnvironment:
         # or if num nodes in env vars
         # LOCAL_WORLD_SIZE = WORLD_SIZE // node_count
 
-        self.master_addr = "127.0.0.1"
-        self.master_port = 0
+        self._set_from_preset_env()
+        # self.master_addr = os.environ["SLURM_LAUNCH_NODE_IPADDR"]
+        # self.master_port = random.randint(10000, 20000)
         self.rank = RANK
         self.world_size = WORLD_SIZE
         self.local_rank = LOCAL_RANK
