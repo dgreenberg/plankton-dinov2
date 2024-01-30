@@ -48,9 +48,9 @@ class LMDBDataset(ImageNet):
         ):  # if we have a single file
             return self.root + "_*"
         elif self._split.value.upper() == "ALL":
-            return "*"
+            return os.path.join(self.root, "*")
         else:
-            return f"-{self._split.value.upper()}_*"
+            return os.path.join(self.root, f"*-{self._split.value.upper()}_*")
 
     def _get_extra_full_path(self, extra_path: str) -> str:
         if not os.path.isdir(self.root):
@@ -65,9 +65,9 @@ class LMDBDataset(ImageNet):
         return self._entries
 
     def _load_extra(self, extra_path: str):
-        extra_full_path = self._get_extra_full_path(extra_path)
-        print("extra_full_path", extra_full_path)
-        file_list = glob.glob(extra_full_path)
+        # extra_full_path = self._get_extra_full_path(extra_path)
+        print("extra_path", extra_path)
+        file_list = glob.glob(extra_path)
 
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
         print("Datasets labels file list: ", file_list_labels)
