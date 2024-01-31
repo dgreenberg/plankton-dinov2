@@ -63,6 +63,62 @@ def resize_pos_embed(pos_embed, input_shape, pos_shape, mode):
     return pos_embed
 
 
+def match_pos_embeds(
+    pos_embeds_ref: torch.Tensor,
+    pos_embeds_loaded: torch.Tensor,
+    img_shape: Union[tuple, int],
+    loaded_img_shape: Union[tuple, int],
+) -> torch.Tensor:
+    if pos_embeds_loaded.flatten().shape == pos_embeds_ref.flatten().shape:
+        pos_embeds_loaded = pos_embeds_loaded.reshape(pos_embeds_ref.shape)
+    else:
+        print(
+            "Positional embeddings havbe different shapes, matching them...",
+            end=" ",
+        )
+        print(
+            "pos_embed_ref: ",
+            pos_embeds_ref.shape,
+            " pos_embed_loaded: ",
+            pos_embeds_loaded.shape,
+        )
+        pos_embeds_loaded = resize_pos_embed(
+            pos_embeds_loaded,
+            input_shape=img_shape,
+            pos_shape=loaded_img_shape,
+            mode="bicubic",
+        )
+    return pos_embeds_loaded
+
+
+def match_state_dict_keys(state_dict, keys_load, keys_model):
+    print("Adapting keys")
+    new_state_dict = dict()
+    double_nb_ptn = "blocks.[0-9]{1,2}.([0-9]{1,2}.[a-z0-9_\.]+)"
+
+    nb_double_ptn = sum([k1 for k1 in keys_load if re.search(double_nb_ptn, k1)])
+    if nb_double_ptn / len(keys_load) > 0.2:
+        # replace doubly numbered blocks in loaded dict by single block number
+        new_state_dict = {
+            (
+                ("blocks." + re.search(double_nb_ptn, k).group(1))
+                if re.search(double_nb_ptn, k)
+                else k
+            ): v
+            for k, v in state_dict.items()
+        }
+    else:  # inverse, replace single in loada by double ptn
+        for k1 in keys_model:
+            match = re.search(double_nb_ptn, k1)
+            if match:
+                single_key = "blocks." + match.group(1)
+                if single_key in keys_load:
+                    new_state_dict[k1] = state_dict[single_key]
+            else:
+                new_state_dict[k1] = state_dict[k1]
+    return new_state_dict
+
+
 def load_pretrained_weights(
     model, pretrained_weights, checkpoint_key, teacher_student_key="teacher"
 ):
@@ -98,44 +154,10 @@ def load_pretrained_weights(
         )
         sys.exit(1)
 
-    double_nb_ptn = "blocks.[0-9]{1,2}.([0-9]{1,2}.[a-z0-9_\.]+)"
-
-    # replace doubly numbered blocks by single block number
-    state_dict = {
-        (
-            ("blocks." + re.search(double_nb_ptn, k).group(1))
-            if re.search(double_nb_ptn, k)
-            else k
-        ): v
-        for k, v in state_dict.items()
-    }
-
-    def match_pos_embeds(
-        pos_embeds_ref: torch.Tensor,
-        pos_embeds_loaded: torch.Tensor,
-        img_shape: Union[tuple, int],
-        loaded_img_shape: Union[tuple, int],
-    ) -> torch.Tensor:
-        if pos_embeds_loaded.flatten().shape == pos_embeds_ref.flatten().shape:
-            pos_embeds_loaded = pos_embeds_loaded.reshape(pos_embeds_ref.shape)
-        else:
-            print(
-                "Positional embeddings havbe different shapes, matching them...",
-                end=" ",
-            )
-            print(
-                "pos_embed_ref: ",
-                pos_embeds_ref.shape,
-                " pos_embed_loaded: ",
-                pos_embeds_loaded.shape,
-            )
-            pos_embeds_loaded = resize_pos_embed(
-                pos_embeds_loaded,
-                input_shape=img_shape,
-                pos_shape=loaded_img_shape,
-                mode="bicubic",
-            )
-        return pos_embeds_loaded
+    keys_load = set(state_dict.keys())
+    keys_model = set(model.state_dict().keys())
+    if len(keys_load.intersection(keys_model)) / len(keys_model) < 0.6:
+        state_dict = match_state_dict_keys(state_dict, keys_load, keys_model)
 
     if "pos_embed" in model.state_dict().keys() and "pos_embed" in state_dict.keys():
         loaded_img_shape = int(np.sqrt(state_dict["pos_embed"].shape[1] - 1))

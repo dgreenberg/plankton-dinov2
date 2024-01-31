@@ -11,7 +11,6 @@ from torch import nn
 from torchmetrics import MetricCollection
 
 import dinov2.distributed as distributed
-import wandb
 from dinov2.data import DatasetWithEnumeratedTargets, SamplerType, make_data_loader
 from dinov2.logging import MetricLogger
 
@@ -82,7 +81,6 @@ def evaluate(
     metric_logger_stats = {
         k: meter.global_avg for k, meter in metric_logger.meters.items()
     }
-    wandb.log(metric_logger_stats)
     return metric_logger_stats, stats
 
 
