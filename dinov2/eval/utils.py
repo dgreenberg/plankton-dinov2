@@ -64,6 +64,7 @@ def evaluate(
     header = "Test:"
 
     for samples, targets, *_ in metric_logger.log_every(data_loader, 10, header):
+        # outputs is tuple of tuple 4 x (torch.Size([B, 2B, 384]), torch.Size([B, 384]))
         outputs = model(samples.to(device))
         targets = targets.to(device)
         if criterion is not None:

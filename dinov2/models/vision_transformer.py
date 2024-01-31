@@ -352,7 +352,9 @@ class DinoVisionTransformer(nn.Module):
         else:
             outputs = self._get_intermediate_layers_not_chunked(x, n)
         if norm:
-            outputs = [self.norm(out) for out in outputs]
+            outputs = [
+                self.norm(out) for out in outputs
+            ]  # mem leak occurs here if mlp commented
         class_tokens = [out[:, 0] for out in outputs]
         outputs = [out[:, 1 + self.num_register_tokens :] for out in outputs]
         if reshape:

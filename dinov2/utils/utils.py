@@ -6,6 +6,7 @@
 import logging
 import os
 import random
+import re
 import subprocess
 import sys
 from typing import Union
@@ -96,6 +97,18 @@ def load_pretrained_weights(
             f"Error: Key {teacher_student_key} not recognized, options are: 'student', 'teacher'"
         )
         sys.exit(1)
+
+    double_nb_ptn = "blocks.[0-9]{1,2}.([0-9]{1,2}.[a-z0-9_\.]+)"
+
+    # replace doubly numbered blocks by single block number
+    state_dict = {
+        (
+            ("blocks." + re.search(double_nb_ptn, k).group(1))
+            if re.search(double_nb_ptn, k)
+            else k
+        ): v
+        for k, v in state_dict.items()
+    }
 
     def match_pos_embeds(
         pos_embeds_ref: torch.Tensor,
