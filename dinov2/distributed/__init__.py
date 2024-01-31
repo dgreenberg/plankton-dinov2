@@ -7,7 +7,7 @@ import os
 import random
 import re
 import socket
-from typing import Dict, List
+from typing import List
 
 import torch
 import torch.distributed as dist
@@ -140,6 +140,7 @@ class _TorchDistributedEnvironment:
     def __init__(self):
         dist.init_process_group(backend="nccl")
         dist.barrier()
+        print("Torch dist initialized")
 
         global RANK, WORLD_SIZE, LOCAL_RANK, LOCAL_WORLD_SIZE
         RANK = dist.get_rank(group=None)
