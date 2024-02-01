@@ -73,7 +73,7 @@ def match_pos_embeds(
         pos_embeds_loaded = pos_embeds_loaded.reshape(pos_embeds_ref.shape)
     else:
         print(
-            "Positional embeddings havbe different shapes, matching them...",
+            "Positional embeddings have different shapes, matching them...",
             end=" ",
         )
         print(
@@ -96,7 +96,7 @@ def match_state_dict_keys(state_dict, keys_load, keys_model):
     new_state_dict = dict()
     double_nb_ptn = "blocks.[0-9]{1,2}.([0-9]{1,2}.[a-z0-9_\.]+)"
 
-    nb_double_ptn = sum([k1 for k1 in keys_load if re.search(double_nb_ptn, k1)])
+    nb_double_ptn = len([k1 for k1 in keys_load if re.search(double_nb_ptn, k1)])
     if nb_double_ptn / len(keys_load) > 0.2:
         # replace doubly numbered blocks in loaded dict by single block number
         new_state_dict = {
