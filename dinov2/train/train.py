@@ -73,7 +73,9 @@ def get_args_parser(add_help: bool = True):
     parser.add_argument(
         "--run_name", type=str, help="Name for the wandb log", default="run_"
     )
-    parser.add_argument("nnodes", type=int, default=1, help="Set number of nodes used.")
+    parser.add_argument(
+        "--nnodes", type=int, default=1, help="Set number of nodes used."
+    )
 
     return parser
 
