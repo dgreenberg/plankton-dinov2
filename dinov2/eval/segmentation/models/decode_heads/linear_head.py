@@ -3,13 +3,13 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
+import mmcv
 import torch
 import torch.nn as nn
-
+from mmcv.transforms import Resize
 from mmseg.models.builder import HEADS
 from mmseg.models.decode_heads.decode_head import BaseDecodeHead
-from mmcv.transforms import Resize
-import mmcv
+
 
 @HEADS.register_module()
 class BNHead(BaseDecodeHead):
@@ -65,14 +65,23 @@ class BNHead(BaseDecodeHead):
             # Resizing shenanigans
             # print("before", *(x.shape for x in inputs))
             if self.resize_factors is not None:
-                assert len(self.resize_factors) == len(inputs), (len(self.resize_factors), len(inputs))
+                assert len(self.resize_factors) == len(inputs), (
+                    len(self.resize_factors),
+                    len(inputs),
+                )
                 inputs = [
-                    mmcv.imresize(input=x, scale_factor=f, interpolation="bilinear" if f >= 1 else "area")
+                    mmcv.imresize(
+                        input=x,
+                        scale_factor=f,
+                        interpolation="bilinear" if f >= 1 else "area",
+                    )
                     for x, f in zip(inputs, self.resize_factors)
                 ]
                 # print("after", *(x.shape for x in inputs))
             upsampled_inputs = [
-                mmcv.imresize(input=x, size=inputs[0].shape[2:], interpolation="bilinear") #, align_corners=self.align_corners)
+                mmcv.imresize(
+                    input=x, size=inputs[0].shape[2:], interpolation="bilinear"
+                )  # , align_corners=self.align_corners)
                 for x in inputs
             ]
             inputs = torch.cat(upsampled_inputs, dim=1)

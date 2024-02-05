@@ -1,27 +1,32 @@
 import argparse
-import sys
 import os
+import sys
 
 sys.path.insert(0, "..")
 
-import numpy as np
-import torch
-import matplotlib.pyplot as plt
-import os
-
-from io import BytesIO
-import pandas as pd
-import h5py
 import json
-from PIL import Image
-import lmdb
-
-from functools import partial
+import os
 from datetime import datetime
+from functools import partial
+from io import BytesIO
 
-from dinov2.data import SamplerType, make_data_loader, make_dataset
-from dinov2.data import collate_data_and_cast, DataAugmentationDINO, MaskingGenerator
+import h5py
+import lmdb
+import matplotlib.pyplot as plt
+import numpy as np
+import pandas as pd
+import torch
+from PIL import Image
+
 import dinov2.distributed as distributed
+from dinov2.data import (
+    DataAugmentationDINO,
+    MaskingGenerator,
+    SamplerType,
+    collate_data_and_cast,
+    make_data_loader,
+    make_dataset,
+)
 
 
 def main(args):
@@ -35,8 +40,12 @@ def main(args):
     for data_file in data_files:
         train_data_path = f"/home/jluesch/Documents/data/plankton/{data_file}"
 
-        lmdb_imgs_path = f"/home/jluesch/Documents/data/plankton/lmdb/{data_file[:-5]}_imgs"
-        lmdb_labels_path = f"/home/jluesch/Documents/data/plankton/lmdb/{data_file[:-5]}_labels"
+        lmdb_imgs_path = (
+            f"/home/jluesch/Documents/data/plankton/lmdb/{data_file[:-5]}_imgs"
+        )
+        lmdb_labels_path = (
+            f"/home/jluesch/Documents/data/plankton/lmdb/{data_file[:-5]}_labels"
+        )
         print(lmdb_imgs_path, lmdb_labels_path)
 
         env_imgs = lmdb.open(lmdb_imgs_path, map_size=map_size)
@@ -53,11 +62,19 @@ def main(args):
             with env_imgs.begin(write=True) as txn_imgs:
                 for entry in file_index["files"]:
                     if entry["index"] % 50000 == 0:
-                        print(entry["index"] / tot_nb_samples, entry["index"], entry["class_id"], entry["path"])
+                        print(
+                            entry["index"] / tot_nb_samples,
+                            entry["index"],
+                            entry["class_id"],
+                            entry["path"],
+                        )
 
                     img_bytes = file[entry["path"]][()]
                     txn_imgs.put(str(entry["index"]).encode("utf-8"), img_bytes)
-                    txn_labels.put(str(entry["index"]).encode("utf-8"), str(entry["class_id"]).encode("utf-8"))
+                    txn_labels.put(
+                        str(entry["index"]).encode("utf-8"),
+                        str(entry["class_id"]).encode("utf-8"),
+                    )
 
         env_imgs.close()
         env_labels.close()

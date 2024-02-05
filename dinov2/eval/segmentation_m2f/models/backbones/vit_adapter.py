@@ -12,7 +12,12 @@ from mmseg.models.builder import BACKBONES
 from torch.nn.init import normal_
 
 from ...ops.modules import MSDeformAttn
-from .adapter_modules import InteractionBlock, InteractionBlockWithCls, SpatialPriorModule, deform_inputs
+from .adapter_modules import (
+    InteractionBlock,
+    InteractionBlockWithCls,
+    SpatialPriorModule,
+    deform_inputs,
+)
 from .vit import TIMMVisionTransformer
 
 
@@ -37,10 +42,11 @@ class ViTAdapter(TIMMVisionTransformer):
         use_cls=True,
         with_cp=False,
         *args,
-        **kwargs
+        **kwargs,
     ):
-
-        super().__init__(num_heads=num_heads, pretrained=pretrained, with_cp=with_cp, *args, **kwargs)
+        super().__init__(
+            num_heads=num_heads, pretrained=pretrained, with_cp=with_cp, *args, **kwargs
+        )
         if freeze_vit:
             for param in self.parameters():
                 param.requires_grad = False
@@ -58,7 +64,9 @@ class ViTAdapter(TIMMVisionTransformer):
         block_fn = InteractionBlockWithCls if use_cls else InteractionBlock
 
         self.level_embed = nn.Parameter(torch.zeros(3, embed_dim))
-        self.spm = SpatialPriorModule(inplanes=conv_inplane, embed_dim=embed_dim, with_cp=False)
+        self.spm = SpatialPriorModule(
+            inplanes=conv_inplane, embed_dim=embed_dim, with_cp=False
+        )
         self.interactions = nn.Sequential(
             *[
                 block_fn(
@@ -71,7 +79,10 @@ class ViTAdapter(TIMMVisionTransformer):
                     with_cffn=with_cffn,
                     cffn_ratio=cffn_ratio,
                     deform_ratio=deform_ratio,
-                    extra_extractor=((True if i == len(interaction_indexes) - 1 else False) and use_extra_extractor),
+                    extra_extractor=(
+                        (True if i == len(interaction_indexes) - 1 else False)
+                        and use_extra_extractor
+                    ),
                     with_cp=with_cp,
                 )
                 for i in range(len(interaction_indexes))
@@ -106,7 +117,10 @@ class ViTAdapter(TIMMVisionTransformer):
 
     def _get_pos_embed(self, pos_embed, H, W):
         pos_embed = pos_embed.reshape(
-            1, self.pretrain_size[0] // self.patch_size, self.pretrain_size[1] // self.patch_size, -1
+            1,
+            self.pretrain_size[0] // self.patch_size,
+            self.pretrain_size[1] // self.patch_size,
+            -1,
         ).permute(0, 3, 1, 2)
         pos_embed = (
             F.interpolate(pos_embed, size=(H, W), mode="bicubic", align_corners=False)
@@ -140,7 +154,9 @@ class ViTAdapter(TIMMVisionTransformer):
         bs, n, dim = x.shape
         pos_embed = self._get_pos_embed(self.pos_embed[:, 1:], H_toks, W_toks)
         if self.use_cls:
-            cls_token = self.cls_token.expand(x.shape[0], -1, -1)  # stole cls_tokens impl from Phil Wang, thanks
+            cls_token = self.cls_token.expand(
+                x.shape[0], -1, -1
+            )  # stole cls_tokens impl from Phil Wang, thanks
             x = torch.cat((cls_token, x), dim=1)
             pos_embed = torch.cat((self.pos_embed[:, :1], pos_embed), dim=1)
         x = self.pos_drop(x + pos_embed)
@@ -202,10 +218,18 @@ class ViTAdapter(TIMMVisionTransformer):
         if self.add_vit_feature:
             x1, x2, x3, x4 = outs
 
-            x1 = F.interpolate(x1, size=(4 * H_c, 4 * W_c), mode="bilinear", align_corners=False)
-            x2 = F.interpolate(x2, size=(2 * H_c, 2 * W_c), mode="bilinear", align_corners=False)
-            x3 = F.interpolate(x3, size=(1 * H_c, 1 * W_c), mode="bilinear", align_corners=False)
-            x4 = F.interpolate(x4, size=(H_c // 2, W_c // 2), mode="bilinear", align_corners=False)
+            x1 = F.interpolate(
+                x1, size=(4 * H_c, 4 * W_c), mode="bilinear", align_corners=False
+            )
+            x2 = F.interpolate(
+                x2, size=(2 * H_c, 2 * W_c), mode="bilinear", align_corners=False
+            )
+            x3 = F.interpolate(
+                x3, size=(1 * H_c, 1 * W_c), mode="bilinear", align_corners=False
+            )
+            x4 = F.interpolate(
+                x4, size=(H_c // 2, W_c // 2), mode="bilinear", align_corners=False
+            )
             # print(c1.shape, c2.shape, c3.shape, c4.shape, x1.shape, x2.shape, x3.shape, x4.shape, H_c, H_toks)
             c1, c2, c3, c4 = c1 + x1, c2 + x2, c3 + x3, c4 + x4
 

@@ -38,10 +38,21 @@ class DepthEncoderDecoder(BaseDepther):
     EncoderDecoder typically consists of backbone, (neck) and decode_head.
     """
 
-    def __init__(self, backbone, decode_head, neck=None, train_cfg=None, test_cfg=None, pretrained=None, init_cfg=None):
+    def __init__(
+        self,
+        backbone,
+        decode_head,
+        neck=None,
+        train_cfg=None,
+        test_cfg=None,
+        pretrained=None,
+        init_cfg=None,
+    ):
         super(DepthEncoderDecoder, self).__init__(init_cfg)
         if pretrained is not None:
-            assert backbone.get("pretrained") is None, "both backbone and depther set pretrained weight"
+            assert (
+                backbone.get("pretrained") is None
+            ), "both backbone and depther set pretrained weight"
             backbone.pretrained = pretrained
         self.backbone = builder.build_backbone(backbone)
         self._init_decode_head(decode_head)
@@ -72,21 +83,27 @@ class DepthEncoderDecoder(BaseDepther):
         x = self.extract_feat(img)
         out = self._decode_head_forward_test(x, img_metas)
         # crop the pred depth to the certain range.
-        out = torch.clamp(out, min=self.decode_head.min_depth, max=self.decode_head.max_depth)
+        out = torch.clamp(
+            out, min=self.decode_head.min_depth, max=self.decode_head.max_depth
+        )
         if rescale:
             if size is None:
                 if img_metas is not None:
                     size = img_metas[0]["ori_shape"][:2]
                 else:
                     size = img.shape[2:]
-            out = resize(input=out, size=size, mode="bilinear", align_corners=self.align_corners)
+            out = resize(
+                input=out, size=size, mode="bilinear", align_corners=self.align_corners
+            )
         return out
 
     def _decode_head_forward_train(self, img, x, img_metas, depth_gt, **kwargs):
         """Run forward function and calculate loss for decode head in
         training."""
         losses = dict()
-        loss_decode = self.decode_head.forward_train(img, x, img_metas, depth_gt, self.train_cfg, **kwargs)
+        loss_decode = self.decode_head.forward_train(
+            img, x, img_metas, depth_gt, self.train_cfg, **kwargs
+        )
         losses.update(add_prefix(loss_decode, "decode"))
         return losses
 
@@ -124,7 +141,9 @@ class DepthEncoderDecoder(BaseDepther):
         losses = dict()
 
         # the last of x saves the info from neck
-        loss_decode = self._decode_head_forward_train(img, x, img_metas, depth_gt, **kwargs)
+        loss_decode = self._decode_head_forward_train(
+            img, x, img_metas, depth_gt, **kwargs
+        )
 
         losses.update(loss_decode)
 
@@ -160,13 +179,23 @@ class DepthEncoderDecoder(BaseDepther):
                 x1 = max(x2 - w_crop, 0)
                 crop_img = img[:, :, y1:y2, x1:x2]
                 depth_pred = self.encode_decode(crop_img, img_meta, rescale)
-                preds += F.pad(depth_pred, (int(x1), int(preds.shape[3] - x2), int(y1), int(preds.shape[2] - y2)))
+                preds += F.pad(
+                    depth_pred,
+                    (
+                        int(x1),
+                        int(preds.shape[3] - x2),
+                        int(y1),
+                        int(preds.shape[2] - y2),
+                    ),
+                )
 
                 count_mat[:, :, y1:y2, x1:x2] += 1
         assert (count_mat == 0).sum() == 0
         if torch.onnx.is_in_onnx_export():
             # cast count_mat to constant while exporting to ONNX
-            count_mat = torch.from_numpy(count_mat.cpu().detach().numpy()).to(device=img.device)
+            count_mat = torch.from_numpy(count_mat.cpu().detach().numpy()).to(
+                device=img.device
+            )
         preds = preds / count_mat
         return preds
 
@@ -227,7 +256,9 @@ class DepthEncoderDecoder(BaseDepther):
         # to save memory, we get augmented depth logit inplace
         depth_pred = self.inference(imgs[0], img_metas[0], rescale)
         for i in range(1, len(imgs)):
-            cur_depth_pred = self.inference(imgs[i], img_metas[i], rescale, size=depth_pred.shape[-2:])
+            cur_depth_pred = self.inference(
+                imgs[i], img_metas[i], rescale, size=depth_pred.shape[-2:]
+            )
             depth_pred += cur_depth_pred
         depth_pred /= len(imgs)
         depth_pred = depth_pred.cpu().numpy()

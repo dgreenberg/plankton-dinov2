@@ -11,7 +11,7 @@ import torch
 
 from .backbones import _make_dinov2_model
 from .depth import BNHead, DepthEncoderDecoder, DPTHead
-from .utils import _DINOV2_BASE_URL, _make_dinov2_model_name, CenterPadding
+from .utils import _DINOV2_BASE_URL, CenterPadding, _make_dinov2_model_name
 
 
 class Weights(Enum):
@@ -19,7 +19,9 @@ class Weights(Enum):
     KITTI = "KITTI"
 
 
-def _get_depth_range(pretrained: bool, weights: Weights = Weights.NYU) -> Tuple[float, float]:
+def _get_depth_range(
+    pretrained: bool, weights: Weights = Weights.NYU
+) -> Tuple[float, float]:
     if not pretrained:  # Default
         return (0.001, 10.0)
 
@@ -126,12 +128,17 @@ def _make_dinov2_linear_depther(
         return_class_token=True,
         norm=False,
     )
-    model.backbone.register_forward_pre_hook(lambda _, x: CenterPadding(patch_size)(x[0]))
+    model.backbone.register_forward_pre_hook(
+        lambda _, x: CenterPadding(patch_size)(x[0])
+    )
 
     if pretrained:
         layers_str = str(layers) if layers == 4 else ""
         weights_str = weights.value.lower()
-        url = _DINOV2_BASE_URL + f"/{model_name}/{model_name}_{weights_str}_linear{layers_str}_head.pth"
+        url = (
+            _DINOV2_BASE_URL
+            + f"/{model_name}/{model_name}_{weights_str}_linear{layers_str}_head.pth"
+        )
         checkpoint = torch.hub.load_state_dict_from_url(url, map_location="cpu")
         if "state_dict" in checkpoint:
             state_dict = checkpoint["state_dict"]
@@ -140,27 +147,68 @@ def _make_dinov2_linear_depther(
     return model
 
 
-def dinov2_vits14_ld(*, layers: int = 4, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs):
+def dinov2_vits14_ld(
+    *,
+    layers: int = 4,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.NYU,
+    **kwargs,
+):
     return _make_dinov2_linear_depther(
-        arch_name="vit_small", layers=layers, pretrained=pretrained, weights=weights, **kwargs
+        arch_name="vit_small",
+        layers=layers,
+        pretrained=pretrained,
+        weights=weights,
+        **kwargs,
     )
 
 
-def dinov2_vitb14_ld(*, layers: int = 4, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs):
+def dinov2_vitb14_ld(
+    *,
+    layers: int = 4,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.NYU,
+    **kwargs,
+):
     return _make_dinov2_linear_depther(
-        arch_name="vit_base", layers=layers, pretrained=pretrained, weights=weights, **kwargs
+        arch_name="vit_base",
+        layers=layers,
+        pretrained=pretrained,
+        weights=weights,
+        **kwargs,
     )
 
 
-def dinov2_vitl14_ld(*, layers: int = 4, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs):
+def dinov2_vitl14_ld(
+    *,
+    layers: int = 4,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.NYU,
+    **kwargs,
+):
     return _make_dinov2_linear_depther(
-        arch_name="vit_large", layers=layers, pretrained=pretrained, weights=weights, **kwargs
+        arch_name="vit_large",
+        layers=layers,
+        pretrained=pretrained,
+        weights=weights,
+        **kwargs,
     )
 
 
-def dinov2_vitg14_ld(*, layers: int = 4, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs):
+def dinov2_vitg14_ld(
+    *,
+    layers: int = 4,
+    pretrained: bool = True,
+    weights: Union[Weights, str] = Weights.NYU,
+    **kwargs,
+):
     return _make_dinov2_linear_depther(
-        arch_name="vit_giant2", layers=layers, ffn_layer="swiglufused", pretrained=pretrained, weights=weights, **kwargs
+        arch_name="vit_giant2",
+        layers=layers,
+        ffn_layer="swiglufused",
+        pretrained=pretrained,
+        weights=weights,
+        **kwargs,
     )
 
 
@@ -198,7 +246,9 @@ def _make_dinov2_dpt_depther(
     backbone = _make_dinov2_model(arch_name=arch_name, pretrained=pretrained, **kwargs)
 
     model_name = _make_dinov2_model_name(arch_name, backbone.patch_size)
-    dpt_depth_head = _make_dinov2_dpt_depth_head(embed_dim=backbone.embed_dim, min_depth=min_depth, max_depth=max_depth)
+    dpt_depth_head = _make_dinov2_dpt_depth_head(
+        embed_dim=backbone.embed_dim, min_depth=min_depth, max_depth=max_depth
+    )
 
     out_index = {
         "vit_small": [2, 5, 8, 11],
@@ -215,11 +265,15 @@ def _make_dinov2_dpt_depther(
         return_class_token=True,
         norm=False,
     )
-    model.backbone.register_forward_pre_hook(lambda _, x: CenterPadding(backbone.patch_size)(x[0]))
+    model.backbone.register_forward_pre_hook(
+        lambda _, x: CenterPadding(backbone.patch_size)(x[0])
+    )
 
     if pretrained:
         weights_str = weights.value.lower()
-        url = _DINOV2_BASE_URL + f"/{model_name}/{model_name}_{weights_str}_dpt_head.pth"
+        url = (
+            _DINOV2_BASE_URL + f"/{model_name}/{model_name}_{weights_str}_dpt_head.pth"
+        )
         checkpoint = torch.hub.load_state_dict_from_url(url, map_location="cpu")
         if "state_dict" in checkpoint:
             state_dict = checkpoint["state_dict"]
@@ -228,19 +282,37 @@ def _make_dinov2_dpt_depther(
     return model
 
 
-def dinov2_vits14_dd(*, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs):
-    return _make_dinov2_dpt_depther(arch_name="vit_small", pretrained=pretrained, weights=weights, **kwargs)
-
-
-def dinov2_vitb14_dd(*, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs):
-    return _make_dinov2_dpt_depther(arch_name="vit_base", pretrained=pretrained, weights=weights, **kwargs)
-
-
-def dinov2_vitl14_dd(*, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs):
-    return _make_dinov2_dpt_depther(arch_name="vit_large", pretrained=pretrained, weights=weights, **kwargs)
-
-
-def dinov2_vitg14_dd(*, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs):
+def dinov2_vits14_dd(
+    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs
+):
     return _make_dinov2_dpt_depther(
-        arch_name="vit_giant2", ffn_layer="swiglufused", pretrained=pretrained, weights=weights, **kwargs
+        arch_name="vit_small", pretrained=pretrained, weights=weights, **kwargs
+    )
+
+
+def dinov2_vitb14_dd(
+    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs
+):
+    return _make_dinov2_dpt_depther(
+        arch_name="vit_base", pretrained=pretrained, weights=weights, **kwargs
+    )
+
+
+def dinov2_vitl14_dd(
+    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs
+):
+    return _make_dinov2_dpt_depther(
+        arch_name="vit_large", pretrained=pretrained, weights=weights, **kwargs
+    )
+
+
+def dinov2_vitg14_dd(
+    *, pretrained: bool = True, weights: Union[Weights, str] = Weights.NYU, **kwargs
+):
+    return _make_dinov2_dpt_depther(
+        arch_name="vit_giant2",
+        ffn_layer="swiglufused",
+        pretrained=pretrained,
+        weights=weights,
+        **kwargs,
     )

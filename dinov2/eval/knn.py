@@ -4,17 +4,16 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import argparse
-from functools import partial
 import json
 import logging
 import os
 import sys
+from functools import partial
 from typing import List, Optional
 
 import torch
 from torch.nn.functional import one_hot, softmax
 
-from datetime import datetime
 import dinov2.distributed as distributed
 from dinov2.data import SamplerType, make_data_loader, make_dataset
 from dinov2.data.transforms import make_classification_eval_transform
@@ -22,7 +21,6 @@ from dinov2.eval.metrics import AccuracyAveraging, build_topk_accuracy_metric
 from dinov2.eval.setup import get_args_parser as get_setup_args_parser
 from dinov2.eval.setup import setup_and_build_model
 from dinov2.eval.utils import ModelWithNormalize, evaluate, extract_features
-
 
 logger = logging.getLogger("dinov2")
 
@@ -95,7 +93,7 @@ def get_args_parser(
         "--run_name",
         type=str,
         help="Name for the wandb log",
-        default=f"knn_run_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
+        default="knn_run",
     )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
@@ -119,15 +117,23 @@ class KnnModule(torch.nn.Module):
     then collated back on the original device.
     """
 
-    def __init__(self, train_features, train_labels, nb_knn, T, device, num_classes=1000):
+    def __init__(
+        self, train_features, train_labels, nb_knn, T, device, num_classes=1000
+    ):
         super().__init__()
 
         self.global_rank = distributed.get_global_rank()
         self.global_size = distributed.get_global_size()
 
         self.device = device
-        self.train_features_rank_T = train_features.chunk(self.global_size)[self.global_rank].T.to(self.device)
-        self.candidates = train_labels.chunk(self.global_size)[self.global_rank].view(1, -1).to(self.device)
+        self.train_features_rank_T = train_features.chunk(self.global_size)[
+            self.global_rank
+        ].T.to(self.device)
+        self.candidates = (
+            train_labels.chunk(self.global_size)[self.global_rank]
+            .view(1, -1)
+            .to(self.device)
+        )
 
         self.nb_knn = nb_knn
         self.max_k = max(self.nb_knn)
@@ -146,7 +152,9 @@ class KnnModule(torch.nn.Module):
 
         broadcasted = features_rank
         if self.global_rank != source_rank:
-            broadcasted = torch.zeros(*broadcast_shape, dtype=features_rank.dtype, device=self.device)
+            broadcasted = torch.zeros(
+                *broadcast_shape, dtype=features_rank.dtype, device=self.device
+            )
         torch.distributed.broadcast(broadcasted, source_rank)
 
         # Compute the neighbors for `source_rank` among `train_features_rank_T`
@@ -158,8 +166,12 @@ class KnnModule(torch.nn.Module):
         # Gather all neighbors for `target_rank`
         topk_sims_rank = retrieved_rank = None
         if self.global_rank == target_rank:
-            topk_sims_rank = [torch.zeros_like(topk_sims) for _ in range(self.global_size)]
-            retrieved_rank = [torch.zeros_like(neighbors_labels) for _ in range(self.global_size)]
+            topk_sims_rank = [
+                torch.zeros_like(topk_sims) for _ in range(self.global_size)
+            ]
+            retrieved_rank = [
+                torch.zeros_like(neighbors_labels) for _ in range(self.global_size)
+            ]
 
         torch.distributed.gather(topk_sims, topk_sims_rank, dst=target_rank)
         torch.distributed.gather(neighbors_labels, retrieved_rank, dst=target_rank)
@@ -208,7 +220,9 @@ class DictKeysModule(torch.nn.Module):
         return {"preds": features_dict, "target": targets}
 
 
-def create_module_dict(*, module, n_per_class_list, n_tries, nb_knn, train_features, train_labels):
+def create_module_dict(
+    *, module, n_per_class_list, n_tries, nb_knn, train_features, train_labels
+):
     modules = {}
     mapping = create_class_indices_mapping(train_labels)
     for npc in n_per_class_list:
@@ -246,7 +260,9 @@ def filter_train(mapping, n_per_class, seed):
 
 def create_class_indices_mapping(labels):
     unique_labels, inverse = torch.unique(labels, return_inverse=True)
-    mapping = {unique_labels[i]: (inverse == i).nonzero() for i in range(len(unique_labels))}
+    mapping = {
+        unique_labels[i]: (inverse == i).nonzero() for i in range(len(unique_labels))
+    }
     return mapping
 
 
@@ -286,11 +302,15 @@ def eval_knn(
         persistent_workers=True,
     )
     num_classes = int(train_labels.max() + 1)
-    print('Train num_classes', num_classes)
-    metric_collection = build_topk_accuracy_metric(accuracy_averaging, num_classes=num_classes)
+    print("Train num_classes", num_classes)
+    metric_collection = build_topk_accuracy_metric(
+        accuracy_averaging, num_classes=num_classes
+    )
 
     device = torch.cuda.current_device()
-    partial_module = partial(KnnModule, T=temperature, device=device, num_classes=num_classes)
+    partial_module = partial(
+        KnnModule, T=temperature, device=device, num_classes=num_classes
+    )
     knn_module_dict = create_module_dict(
         module=partial_module,
         n_per_class_list=n_per_class_list,
@@ -304,23 +324,43 @@ def eval_knn(
         for t, knn_try in knn_module.items():
             postprocessors = {
                 **postprocessors,
-                **{(n_per_class, t, k): DictKeysModule([n_per_class, t, k]) for k in knn_try.nb_knn},
+                **{
+                    (n_per_class, t, k): DictKeysModule([n_per_class, t, k])
+                    for k in knn_try.nb_knn
+                },
             }
-            metrics = {**metrics, **{(n_per_class, t, k): metric_collection.clone() for k in knn_try.nb_knn}}
+            metrics = {
+                **metrics,
+                **{
+                    (n_per_class, t, k): metric_collection.clone()
+                    for k in knn_try.nb_knn
+                },
+            }
     model_with_knn = torch.nn.Sequential(model, knn_module_dict)
 
     # ============ evaluation ... ============
     logger.info("Start the k-NN classification.")
-    _, results_dict = evaluate(model_with_knn, val_dataloader, postprocessors, metrics, device)
+    _, results_dict = evaluate(
+        model_with_knn, val_dataloader, postprocessors, metrics, device
+    )
 
     # Averaging the results over the n tries for each value of n_per_class
     for n_per_class, knn_module in knn_module_dict.items():
         first_try = list(knn_module.keys())[0]
         k_list = knn_module[first_try].nb_knn
         for k in k_list:
-            keys = results_dict[(n_per_class, first_try, k)].keys()  # keys are e.g. `top-1` and `top-5`
+            keys = results_dict[
+                (n_per_class, first_try, k)
+            ].keys()  # keys are e.g. `top-1` and `top-5`
             results_dict[(n_per_class, k)] = {
-                key: torch.mean(torch.stack([results_dict[(n_per_class, t, k)][key] for t in knn_module.keys()]))
+                key: torch.mean(
+                    torch.stack(
+                        [
+                            results_dict[(n_per_class, t, k)][key]
+                            for t in knn_module.keys()
+                        ]
+                    )
+                )
                 for key in keys
             }
             for t in knn_module.keys():
@@ -379,9 +419,10 @@ def eval_knn_with_model(
                 metric_val = results_dict_knn[knn_][metric_name].item()
                 results_dict[f"{knn_} {metric_name}"] = metric_val
 
-                metric_log_msg += f'{metric_name}: {metric_val:.4f} '
+                metric_log_msg += f"{metric_name}: {metric_val:.4f} "
             logger.info(metric_log_msg)
 
+    # save in ckpt dir
     metrics_file_path = os.path.join(output_dir, "results_eval_knn.json")
     with open(metrics_file_path, "a") as f:
         for k, v in results_dict.items():
@@ -393,10 +434,12 @@ def eval_knn_with_model(
 
 
 def main(args):
-    model, autocast_dtype = setup_and_build_model(args)
+    model, autocast_dtype = setup_and_build_model(args, do_eval=True)
+
+    print("args.output_dir", args.output_dir)
     eval_knn_with_model(
         model=model,
-        output_dir=args.output_dir,
+        output_dir=args.output_dir_ckpt,
         train_dataset_str=args.train_dataset_str,
         val_dataset_str=args.val_dataset_str,
         nb_knn=args.nb_knn,

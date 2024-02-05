@@ -10,9 +10,9 @@ from typing import Any, Callable, List, Optional, TypeVar
 import torch
 from torch.utils.data import Sampler
 
-from .datasets.lmdb_dataset import LMDBDataset
 from .datasets import ImageNet, ImageNet22k
 from .datasets.hdf5_dataset import HDF5Dataset
+from .datasets.lmdb_dataset import LMDBDataset
 from .samplers import EpochSampler, InfiniteSampler, ShardedInfiniteSampler
 
 logger = logging.getLogger("dinov2")
@@ -30,7 +30,10 @@ def _make_bool_str(b: bool) -> str:
     return "yes" if b else "no"
 
 
-def _make_sample_transform(image_transform: Optional[Callable] = None, target_transform: Optional[Callable] = None):
+def _make_sample_transform(
+    image_transform: Optional[Callable] = None,
+    target_transform: Optional[Callable] = None,
+):
     def transform(sample):
         image, target = sample
         if image_transform is not None:
@@ -79,6 +82,8 @@ def make_dataset(
     dataset_str: str,
     transform: Optional[Callable] = None,
     target_transform: Optional[Callable] = None,
+    with_targets: bool = False,
+    cache_dataset: bool = False,
 ):
     """
     Creates a dataset with the specified parameters.
@@ -95,7 +100,13 @@ def make_dataset(
 
     class_, kwargs = _parse_dataset_str(dataset_str)
     print("Dataset kwargs", kwargs)
-    dataset = class_(transform=transform, target_transform=target_transform, **kwargs)
+    dataset = class_(
+        transform=transform,
+        target_transform=target_transform,
+        with_targets=with_targets,
+        is_cached=cache_dataset,
+        **kwargs,
+    )
 
     logger.info(f"# of dataset samples: {len(dataset):,d}")
 

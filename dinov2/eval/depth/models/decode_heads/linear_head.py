@@ -15,16 +15,26 @@ from .decode_head import DepthBaseDecodeHead
 class BNHead(DepthBaseDecodeHead):
     """Just a batchnorm."""
 
-    def __init__(self, input_transform="resize_concat", in_index=(0, 1, 2, 3), upsample=1, **kwargs):
+    def __init__(
+        self,
+        input_transform="resize_concat",
+        in_index=(0, 1, 2, 3),
+        upsample=1,
+        **kwargs,
+    ):
         super().__init__(**kwargs)
         self.input_transform = input_transform
         self.in_index = in_index
         self.upsample = upsample
         # self.bn = nn.SyncBatchNorm(self.in_channels)
         if self.classify:
-            self.conv_depth = nn.Conv2d(self.channels, self.n_bins, kernel_size=1, padding=0, stride=1)
+            self.conv_depth = nn.Conv2d(
+                self.channels, self.n_bins, kernel_size=1, padding=0, stride=1
+            )
         else:
-            self.conv_depth = nn.Conv2d(self.channels, 1, kernel_size=1, padding=0, stride=1)
+            self.conv_depth = nn.Conv2d(
+                self.channels, 1, kernel_size=1, padding=0, stride=1
+            )
 
     def _transform_inputs(self, inputs):
         """Transform inputs for decoder.

@@ -10,9 +10,8 @@ dist/
 
 .vscode/
 wandb/
-.DS_Store
+dinov2/.DS_Store
 *.sh~
-
 *.sh
 *.yaml
 notebooks/dataloader_benchmark_results.csv
@@ -25,3 +24,6 @@ notebooks/dataloader_benchmark_results_10000_gpuTrue/time_vs_num_workers_worksta
 logs/log.txt
 logs/*.txt
 logs/
+notebooks/test_nb.ipynb
+.DS_Store
+notebooks/test_nb.ipynb

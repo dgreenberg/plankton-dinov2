@@ -4,7 +4,13 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 from .backbones import *  # noqa: F403
-from .builder import MASK_ASSIGNERS, MATCH_COST, TRANSFORMER, build_assigner, build_match_cost
+from .builder import (
+    MASK_ASSIGNERS,
+    MATCH_COST,
+    TRANSFORMER,
+    build_assigner,
+    build_match_cost,
+)
 from .decode_heads import *  # noqa: F403
 from .losses import *  # noqa: F403
 from .plugins import *  # noqa: F403

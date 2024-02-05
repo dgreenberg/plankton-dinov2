@@ -70,6 +70,7 @@ train:
   centering: "sinkhorn_knopp" # or "centering"
   augmentations: "kornia_gpu"
   use_torch_compile: true
+  do_profiling: true
 student:
   arch: vit_small
   patch_size: 14
