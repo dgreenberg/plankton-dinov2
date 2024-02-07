@@ -7,10 +7,12 @@ import argparse
 import json
 import logging
 import os
+import re
 import sys
 from functools import partial
 from typing import List, Optional
 
+import numpy as np
 import torch
 from torch.nn.functional import one_hot, softmax
 
@@ -94,6 +96,9 @@ def get_args_parser(
         type=str,
         help="Name for the wandb log",
         default="knn_run",
+    )
+    parser.add_argument(
+        "--num_nodes", type=int, default=1, help="Set number of nodes used."
     )
     parser.set_defaults(
         train_dataset_str="ImageNet:split=TRAIN",
@@ -341,7 +346,11 @@ def eval_knn(
     # ============ evaluation ... ============
     logger.info("Start the k-NN classification.")
     _, results_dict = evaluate(
-        model_with_knn, val_dataloader, postprocessors, metrics, device
+        model_with_knn,
+        val_dataloader,
+        postprocessors,
+        metrics,
+        device,
     )
 
     # Averaging the results over the n tries for each value of n_per_class
@@ -362,7 +371,19 @@ def eval_knn(
                     )
                 )
                 for key in keys
+                if "confmat" not in key
             }
+            if "confmat" in keys:
+                results_dict[(n_per_class, k)]["confmat"] = torch.sum(
+                    torch.stack(
+                        [
+                            results_dict[(n_per_class, t, k)]["confmat"]
+                            for t in knn_module.keys()
+                        ]
+                    ),
+                    dim=0,
+                )
+
             for t in knn_module.keys():
                 del results_dict[(n_per_class, t, k)]
 
@@ -411,22 +432,38 @@ def eval_knn_with_model(
             n_tries=n_tries,
         )
 
-    results_dict = {}
+    results_dict, confmats_dict = {}, {}
     if distributed.is_main_process():
         for knn_ in results_dict_knn.keys():
             metric_log_msg = f"KNN {knn_[1]} classifier result: "
             for metric_name in results_dict_knn[knn_].keys():
-                metric_val = results_dict_knn[knn_][metric_name].item()
-                results_dict[f"{knn_} {metric_name}"] = metric_val
-
-                metric_log_msg += f"{metric_name}: {metric_val:.4f} "
-            logger.info(metric_log_msg)
+                metric_val = results_dict_knn[knn_][metric_name]
+                if "confmat" in metric_name:
+                    metric_val = metric_val.cpu()
+                    confmats_dict[knn_] = np.array(metric_val, dtype=np.uint)
+                else:
+                    metric_val = metric_val.item()
+                    results_dict[f"{knn_} {metric_name}"] = metric_val
+                    metric_log_msg += f"{metric_name}: {metric_val:.4f} "
+            if "confmat" not in metric_name:
+                logger.info(metric_log_msg)
 
     # save in ckpt dir
     metrics_file_path = os.path.join(output_dir, "results_eval_knn.json")
     with open(metrics_file_path, "a") as f:
         for k, v in results_dict.items():
             f.write(json.dumps({k: v}) + "\n")
+
+    confmat_file_path = os.path.join(output_dir, "confmats_knn")
+    os.makedirs(confmat_file_path, exist_ok=True)
+    np.save(confmat_file_path + ".npy", confmats_dict)
+    for k, v in confmats_dict.items():
+        knn_nb = re.search("[0-9]+", k)
+        if knn_nb:
+            knn_nb = knn_nb.group(0)
+        else:
+            knn_nb = k
+        np.save(os.path.join(confmat_file_path, f"knn_{knn_nb}"), v)
 
     if distributed.is_enabled():
         torch.distributed.barrier()

@@ -13,6 +13,7 @@ from torchmetrics import Metric, MetricCollection
 from torchmetrics.classification import (
     AUROC,
     AveragePrecision,
+    ConfusionMatrix,
     F1Score,
     MulticlassAccuracy,
     Precision,
@@ -99,6 +100,7 @@ def build_topk_accuracy_metric(
     metrics["f1_mi"] = F1Score(
         task="multiclass", average="micro", num_classes=num_classes, top_k=1
     )
+    metrics["confmat"] = ConfusionMatrix(task="multiclass", num_classes=num_classes)
 
     return MetricCollection(metrics)
 
