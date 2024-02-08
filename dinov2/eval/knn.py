@@ -433,6 +433,7 @@ def eval_knn_with_model(
     return results_dict
 
 
+# @record
 def main(args):
     model, autocast_dtype = setup_and_build_model(args, do_eval=True)
 

@@ -5,7 +5,9 @@
 
 # References:
 #   https://github.com/facebookresearch/dino/blob/master/vision_transformer.py
-#   https://github.com/rwightman/pytorch-image-models/tree/master/timm/layers/patch_embed.py
+#   https://colab.research.google.com/github/NielsRogge/Transformers-Tutorials/blob/master/DINO/Visualize_self_attention_of_DINO.ipynb (dinov1)
+#   https://github.com/facebookresearch/dino/blob/main/visualize_attention.py (dinov1 code provided attention visualization)
+
 
 import logging
 import os
@@ -89,9 +91,12 @@ class Block(nn.Module):
 
         self.sample_drop_ratio = drop_path
 
-    def forward(self, x: Tensor) -> Tensor:
+    def forward(self, x: Tensor, return_attention=False) -> Tensor:
         def attn_residual_func(x: Tensor) -> Tensor:
             return self.ls1(self.attn(self.norm1(x)))
+
+        if return_attention:
+            return self.attn(self.norm1(x), return_attn=True)
 
         def ffn_residual_func(x: Tensor) -> Tensor:
             return self.ls2(self.mlp(self.norm2(x)))
@@ -234,7 +239,7 @@ def drop_add_residual_stochastic_depth_list(
 
 
 class NestedTensorBlock(Block):
-    def forward_nested(self, x_list: List[Tensor]) -> List[Tensor]:
+    def forward_nested(self, x_list: List[Tensor]):
         """
         x_list contains a list of tensors to nest together and run
         """
@@ -278,12 +283,13 @@ class NestedTensorBlock(Block):
             x = x + ffn_residual_func(x)
             return attn_bias.split(x)
 
-    def forward(self, x_or_x_list):
+    def forward(self, x_or_x_list, return_attention=False):
         if isinstance(x_or_x_list, Tensor):
-            return super().forward(x_or_x_list)
+            return super().forward(x_or_x_list, return_attention)
         elif isinstance(x_or_x_list, list):
-            if not XFORMERS_AVAILABLE:
-                raise AssertionError("xFormers is required for using nested tensors")
+            assert (
+                XFORMERS_AVAILABLE
+            ), "Please install xFormers for nested tensors usage"
             return self.forward_nested(x_or_x_list)
         else:
             raise AssertionError
