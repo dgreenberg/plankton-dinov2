@@ -445,8 +445,8 @@ def eval_knn_with_model(
                     metric_val = metric_val.item()
                     results_dict[f"{knn_} {metric_name}"] = metric_val
                     metric_log_msg += f"{metric_name}: {metric_val:.4f} "
-            if "confmat" not in metric_name:
-                logger.info(metric_log_msg)
+                if "confmat" not in metric_name:
+                    logger.info(metric_log_msg)
 
     # save in ckpt dir
     metrics_file_path = os.path.join(output_dir, "results_eval_knn.json")
@@ -458,7 +458,7 @@ def eval_knn_with_model(
     os.makedirs(confmat_file_path, exist_ok=True)
     np.save(confmat_file_path + ".npy", confmats_dict)
     for k, v in confmats_dict.items():
-        knn_nb = re.search("[0-9]+", k)
+        knn_nb = re.search("[0-9]+", str(k))
         if knn_nb:
             knn_nb = knn_nb.group(0)
         else:
