@@ -84,11 +84,11 @@ def main(args):
     model.eval()
 
     orig_img = Image.open(
-        # "/home/hgf_mdc/hgf_ysb1444/data/2007/Tontonia_gracillima/IFCB1_2007_141_111713_00338.png"
-        "/home/hgf_mdc/hgf_ysb1444/data/2007/Pseudonitzschia/IFCB1_2007_304_004333_02839.png"
+        # "/home/nkoreub/Documents/Projects/plankton-dinov2/data/raw/2011/Bidulphia/IFCB5_2011_318_031734_02892.png"
+        "/home/nkoreub/Documents/Projects/plankton-dinov2/data/raw/2011/Pseudonitzschia/IFCB1_2011_232_170633_00210.png"
     )
     orig_img = orig_img.convert("RGB")
-    image_size = (orig_img.size[1] * 10, orig_img.size[0] * 10)
+    image_size = (int(1800*(orig_img.size[1]/orig_img.size[0])), 1800)
 
     if imagenet:
         MEAN = [0.485, 0.456, 0.406]
@@ -172,6 +172,7 @@ def main(args):
         ax.set_yticklabels([])
 
     plt.tight_layout()
+    print('saving to ', os.path.join(output_dir, "attn-viz_1" + ".png"))
     plt.savefig(os.path.join(output_dir, "attn-viz_1" + ".png"))
 
 
@@ -180,3 +181,4 @@ if __name__ == "__main__":
     args_parser = get_args_parser(description=description)
     args = args_parser.parse_args()
     sys.exit(main(args))
+ 
