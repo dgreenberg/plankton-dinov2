@@ -23,14 +23,12 @@ def collate_data_and_cast(
     if isinstance(samples, dict):  # on gpu
         collated_global_crops = torch.cat(samples["global_crops"], dim=0)
         collated_local_crops = torch.cat(samples["local_crops"], dim=0)
-        collated_global_crops_teacher = torch.cat(
-            samples["global_crops_teacher"], dim=0
-        )
+        # collated_global_crops_teacher = torch.cat(samples["global_crops_teacher"], dim=0)
 
     else:  # on cpu
         n_global_crops = len(samples[0][0]["global_crops"])
         n_local_crops = len(samples[0][0]["local_crops"])
-        n_global_crops_teacher = len(samples[0][0]["global_crops_teacher"])
+        # n_global_crops_teacher = len(samples[0][0]["global_crops_teacher"])
 
         collated_global_crops = torch.stack(
             [s[0]["global_crops"][i] for i in range(n_global_crops) for s in samples]
@@ -38,13 +36,13 @@ def collate_data_and_cast(
         collated_local_crops = torch.stack(
             [s[0]["local_crops"][i] for i in range(n_local_crops) for s in samples]
         )
-        collated_global_crops_teacher = torch.stack(
-            [
-                s[0]["global_crops_teacher"][i]
-                for i in range(n_global_crops_teacher)
-                for s in samples
-            ]
-        )
+        # collated_global_crops_teacher = torch.stack(
+        #    [
+        #        s[0]["global_crops_teacher"][i]
+        #        for i in range(n_global_crops_teacher)
+        #        for s in samples
+        #    ]
+        # )
 
     B = len(collated_global_crops)
     N = n_tokens
@@ -78,7 +76,7 @@ def collate_data_and_cast(
     return {
         "collated_global_crops": collated_global_crops.to(dtype),
         "collated_local_crops": collated_local_crops.to(dtype),
-        "collated_global_crops_teacher": collated_global_crops_teacher.to(dtype),
+        # "collated_global_crops_teacher": collated_global_crops_teacher.to(dtype),
         "collated_masks": collated_masks,
         "mask_indices_list": mask_indices_list,
         "masks_weight": masks_weight,

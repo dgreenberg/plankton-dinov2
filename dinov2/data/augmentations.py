@@ -152,10 +152,7 @@ class DataAugmentationDINO(object):
 
             global_transfo1_extra = GaussianBlur(p=1.0)
 
-            if self.do_transform_on_gpu:
-                solarize_threshold = 0.5
-            else:
-                solarize_threshold = 128
+            solarize_threshold = 0.5
             global_transfo2_extra = v2.Compose(
                 [
                     GaussianBlur(p=0.1),
@@ -201,7 +198,7 @@ class DataAugmentationDINO(object):
         output["global_crops"] = [global_crop_1, global_crop_2]
 
         # global crops for teacher:
-        output["global_crops_teacher"] = [global_crop_1, global_crop_2]
+        # output["global_crops_teacher"] = [global_crop_1, global_crop_2]
 
         # local crops:
         local_crops = [

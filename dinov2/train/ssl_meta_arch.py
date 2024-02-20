@@ -86,6 +86,7 @@ class SSLMetaArch(nn.Module):
                 hidden_dim=cfg.dino.head_hidden_dim,
                 bottleneck_dim=cfg.dino.head_bottleneck_dim,
                 nlayers=cfg.dino.head_nlayers,
+                use_bn=cfg.dino.head_use_bn,
             )
             self.dino_loss = DINOLoss(self.dino_out_dim)
             if self.do_koleo:
@@ -139,6 +140,7 @@ class SSLMetaArch(nn.Module):
                     hidden_dim=cfg.ibot.head_hidden_dim,
                     bottleneck_dim=cfg.ibot.head_bottleneck_dim,
                     nlayers=cfg.ibot.head_nlayers,
+                    use_bn=cfg.dino.head_use_bn,
                 )
                 student_model_dict["ibot_head"] = ibot_head()
                 teacher_model_dict["ibot_head"] = ibot_head()
@@ -173,9 +175,9 @@ class SSLMetaArch(nn.Module):
         if not images["collated_global_crops"].is_cuda:
             global_crops = images["collated_global_crops"].cuda(non_blocking=True)
             local_crops = images["collated_local_crops"].cuda(non_blocking=True)
-            global_crops_teacher = images["collated_global_crops_teacher"].cuda(
-                non_blocking=True
-            )
+            # global_crops_teacher = images["collated_global_crops_teacher"].cuda(
+            #    non_blocking=True
+            # )
 
             masks = images["collated_masks"].cuda(non_blocking=True)
             mask_indices_list = images["mask_indices_list"].cuda(non_blocking=True)
@@ -185,7 +187,7 @@ class SSLMetaArch(nn.Module):
         else:
             global_crops = images["collated_global_crops"]
             local_crops = images["collated_local_crops"]
-            global_crops_teacher = images["collated_global_crops_teacher"]
+            # global_crops_teacher = images["collated_global_crops_teacher"]
 
             masks = images["collated_masks"]
             mask_indices_list = images["mask_indices_list"]
@@ -207,12 +209,11 @@ class SSLMetaArch(nn.Module):
         # teacher output
         @torch.no_grad()
         def get_teacher_output():
-            n_global_crops_teacher = n_global_crops
             teacher_backbone_output_dict = self.teacher.backbone(
-                global_crops_teacher, is_training=True
+                global_crops, is_training=True
             )
             teacher_cls_tokens = teacher_backbone_output_dict["x_norm_clstoken"]
-            teacher_cls_tokens = teacher_cls_tokens.chunk(n_global_crops_teacher)
+            teacher_cls_tokens = teacher_cls_tokens.chunk(n_global_crops)
             # watch out: these are chunked and cat'd in reverse so A is matched to B in the global crops dino loss
             teacher_cls_tokens = torch.cat(
                 (teacher_cls_tokens[1], teacher_cls_tokens[0])
@@ -268,7 +269,7 @@ class SSLMetaArch(nn.Module):
                     self.dino_loss.softmax_center_teacher(
                         teacher_cls_tokens_after_head, teacher_temp=teacher_temp
                     ).view(
-                        n_global_crops_teacher,
+                        n_global_crops,
                         -1,
                         *teacher_cls_tokens_after_head.shape[1:],
                     )
@@ -298,7 +299,7 @@ class SSLMetaArch(nn.Module):
                     self.dino_loss.sinkhorn_knopp_teacher(
                         teacher_cls_tokens_after_head, teacher_temp=teacher_temp
                     ).view(
-                        n_global_crops_teacher,
+                        n_global_crops,
                         -1,
                         *teacher_cls_tokens_after_head.shape[1:],
                     )
