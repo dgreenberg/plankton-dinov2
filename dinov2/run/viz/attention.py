@@ -85,10 +85,23 @@ def main(args):
 
     orig_img = Image.open(
         # "/home/nkoreub/Documents/Projects/plankton-dinov2/data/raw/2011/Bidulphia/IFCB5_2011_318_031734_02892.png"
-        "/home/nkoreub/Documents/Projects/plankton-dinov2/data/raw/2011/Pseudonitzschia/IFCB1_2011_232_170633_00210.png"
+        # "/home/nkoreub/Documents/Projects/plankton-dinov2/data/raw/2011/Pseudonitzschia/IFCB1_2011_232_170633_00210.png"
+        "/home/nkoreub/Documents/Projects/plankton-dinov2/data/raw/2011/Phaeocystis/IFCB5_2011_039_040624_04022.png"
     )
     orig_img = orig_img.convert("RGB")
-    image_size = (int(1800*(orig_img.size[1]/orig_img.size[0])), 1800)
+
+
+    max_size = 1500
+    w = orig_img.size[0]
+    h = orig_img.size[1]
+    aspect_ratio = w / h if w > h else h / w
+    if w > h:
+        new_w = max_size
+        new_h = int(new_w / aspect_ratio)
+    else:
+        new_h = max_size
+        new_w = int(new_h / aspect_ratio)
+    image_size = (new_h, new_w)
 
     if imagenet:
         MEAN = [0.485, 0.456, 0.406]
@@ -137,7 +150,7 @@ def main(args):
     )
 
     # save attention head heatmaps
-    os.makedirs(output_dir, exist_ok=True)
+    os.makedirs(output_dir, exist_ok=True) 
 
     fig, axes = plt.subplots(nrows=2, ncols=4, figsize=(12, 6))
 
