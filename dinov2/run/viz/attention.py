@@ -21,14 +21,12 @@ from typing import List, Optional
 
 import numpy as np
 import torch
-import torch.nn as nn
 from matplotlib import pyplot as plt
 from PIL import Image
 from torchvision import transforms as pth_transforms
 
 from dinov2.eval.setup import build_model_for_eval
 from dinov2.eval.setup import get_args_parser as get_setup_args_parser
-from dinov2.models.vision_transformer import vit_small
 from dinov2.utils.config import setup
 
 
@@ -51,64 +49,39 @@ def get_args_parser(
         help="Name for the wandb log",
         default="viz_attn_run",
     )
+    parser.add_argument(
+        "--img_path",
+        type=str,
+        help="Image for the visualization",
+    )
     return parser
 
 
 def main(args):
-    # image_size = (952, 952)
-    output_dir = "."
-    patch_size = 14
-
     device = torch.device("cuda") if torch.cuda.is_available() else torch.device("cpu")
-    print(device)
 
-    imagenet = False
+    config = setup(args, do_eval=True)
+    model = build_model_for_eval(config, args.pretrained_weights)
 
-    if imagenet:
-        # imagenet pretrained
-        model = vit_small(patch_size=14, img_size=224, block_chunks=0)
-        model.load_state_dict(
-            torch.load(
-                "/home/hgf_mdc/hgf_ysb1444/checkpoints/dinov2_vits14_pretrain.pth"
-            )
-        )
-
-    else:
-        # our model
-        config = setup(args, do_eval=True)
-        model = build_model_for_eval(config, args.pretrained_weights)
-
-    for p in model.parameters():
-        p.requires_grad = False
+    for param in model.parameters():
+        param.requires_grad = False
     model.to(device)
     model.eval()
 
-    orig_img = Image.open(
-        # "/home/nkoreub/Documents/Projects/plankton-dinov2/data/raw/2011/Bidulphia/IFCB5_2011_318_031734_02892.png"
-        # "/home/nkoreub/Documents/Projects/plankton-dinov2/data/raw/2011/Pseudonitzschia/IFCB1_2011_232_170633_00210.png"
-        "/home/nkoreub/Documents/Projects/plankton-dinov2/data/raw/2011/Phaeocystis/IFCB5_2011_039_040624_04022.png"
-    )
-    orig_img = orig_img.convert("RGB")
+    original_image = Image.open(args.img_path).convert("RGB")
 
-
-    max_size = 1500
-    w = orig_img.size[0]
-    h = orig_img.size[1]
-    aspect_ratio = w / h if w > h else h / w
-    if w > h:
-        new_w = max_size
-        new_h = int(new_w / aspect_ratio)
+    width, height = original_image.size
+    aspect_ratio = width / height if width > height else height / width
+    if width > height:
+        new_width = config.visualization.max_size
+        new_height = int(new_width / aspect_ratio)
     else:
-        new_h = max_size
-        new_w = int(new_h / aspect_ratio)
-    image_size = (new_h, new_w)
+        new_height = config.visualization.max_size
+        new_width = int(new_height / aspect_ratio)
+    image_size = (new_height, new_width)
 
-    if imagenet:
-        MEAN = [0.485, 0.456, 0.406]
-        STD = [0.229, 0.224, 0.225]
-    else:
-        MEAN = [0.68622917, 0.68622917, 0.68622917]
-        STD = [0.10176649, 0.10176649, 0.10176649]
+    MEAN = [0.68622917, 0.68622917, 0.68622917]
+    STD = [0.10176649, 0.10176649, 0.10176649]
 
     transform = pth_transforms.Compose(
         [
@@ -117,41 +90,36 @@ def main(args):
             pth_transforms.Normalize(MEAN, STD),
         ]
     )
-    img = transform(orig_img)
+    img = transform(original_image)
 
-    # make the image divisible by the patch size
-    w, h = (
+    patch_size = config.student.patch_size
+
+    # Make the image divisible by the patch size
+    width, height = (
         img.shape[1] - img.shape[1] % patch_size,
         img.shape[2] - img.shape[2] % patch_size,
     )
-    img = img[:, :w, :h].unsqueeze(0)
+    img = img[:, :width, :height].unsqueeze(0)
 
-    w_featmap = img.shape[-2] // patch_size
-    h_featmap = img.shape[-1] // patch_size
+    width_featmap = img.shape[-2] // patch_size
+    height_featmap = img.shape[-1] // patch_size
 
     attentions = model.get_last_self_attention(img.to(device))
 
-    nh = attentions.shape[1]  # number of heads
+    num_heads = attentions.shape[1]
 
-    # we keep only the output patch attention
-    # for every patch
-    attentions = attentions[0, :, 0, 1:].reshape(nh, -1)
-    attentions = attentions.reshape(nh, w_featmap, h_featmap)
+    # Keep only the output patch attention for every patch
+    attentions = attentions[0, :, 0, 1:].reshape(num_heads, -1)
     attentions = (
-        nn.functional.interpolate(
-            attentions.unsqueeze(0), scale_factor=patch_size, mode="nearest"
-        )[0]
-        .cpu()
-        .numpy()
+        attentions.reshape(num_heads, width_featmap, height_featmap).cpu().numpy()
     )
 
     attentions = np.append(
         attentions, np.mean(attentions, axis=0)[np.newaxis, :, :], axis=0
     )
 
-    # save attention head heatmaps
-    os.makedirs(output_dir, exist_ok=True) 
-
+    print(attentions.shape)
+    os.makedirs(os.path.join(args.output_dir, args.run_name, "figs"), exist_ok=True)
     fig, axes = plt.subplots(nrows=2, ncols=4, figsize=(12, 6))
 
     titles = [
@@ -166,17 +134,18 @@ def main(args):
     ]
 
     images = [
-        orig_img,
+        original_image,
         attentions[0],
         attentions[1],
         attentions[2],
         attentions[-1],
         attentions[3],
         attentions[4],
-        attentions[6],
+        attentions[5],
     ]
 
     for i, ax in enumerate(axes.flat):
+        print(images[i].size)
         ax.imshow(images[i])
         ax.set_title(titles[i])
         ax.set_xticks([])
@@ -185,8 +154,11 @@ def main(args):
         ax.set_yticklabels([])
 
     plt.tight_layout()
-    print('saving to ', os.path.join(output_dir, "attn-viz_1" + ".png"))
-    plt.savefig(os.path.join(output_dir, "attn-viz_1" + ".png"))
+    save_path = os.path.join(
+        args.output_dir, args.run_name, "figs", "attention" + ".png"
+    )
+    print("saving to ", save_path)
+    plt.savefig(save_path)
 
 
 if __name__ == "__main__":
@@ -194,4 +166,3 @@ if __name__ == "__main__":
     args_parser = get_args_parser(description=description)
     args = args_parser.parse_args()
     sys.exit(main(args))
- 
