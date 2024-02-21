@@ -73,6 +73,9 @@ def get_args_parser(add_help: bool = True):
     parser.add_argument(
         "--run_name", type=str, help="Name for the wandb log", default="run_"
     )
+    parser.add_argument(
+        "--num_nodes", type=int, default=1, help="Set number of nodes used."
+    )
 
     return parser
 
@@ -461,7 +464,7 @@ def main(args):
     torch.backends.cudnn.benchmark = True
     fsdp_modules = get_fsdp_modules(model)
     print(
-        f"------ FSDP: #{len(fsdp_modules)} Modules, {count_parameters(model)/1e6:.5}M parameters total ------"
+        f"------ FSDP: #{len(fsdp_modules)} Modules, {count_parameters(model, with_grad=True)/float(1e6):.5}M trainable parameters ------"
     )
 
     if distributed.is_main_process():

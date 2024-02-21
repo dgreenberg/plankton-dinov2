@@ -6,27 +6,9 @@ sys.path.insert(0, "..")
 
 import json
 import os
-from datetime import datetime
-from functools import partial
-from io import BytesIO
 
 import h5py
 import lmdb
-import matplotlib.pyplot as plt
-import numpy as np
-import pandas as pd
-import torch
-from PIL import Image
-
-import dinov2.distributed as distributed
-from dinov2.data import (
-    DataAugmentationDINO,
-    MaskingGenerator,
-    SamplerType,
-    collate_data_and_cast,
-    make_data_loader,
-    make_dataset,
-)
 
 
 def main(args):

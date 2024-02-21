@@ -137,7 +137,7 @@ def _check_env_variable(key: str, new_value: str):
 
 
 class _TorchDistributedEnvironment:
-    def __init__(self):
+    def __init__(self, num_nodes: int = 1):
         dist.init_process_group(backend="nccl")
         dist.barrier()
         print("Torch dist initialized")
@@ -146,10 +146,10 @@ class _TorchDistributedEnvironment:
         RANK = dist.get_rank(group=None)
         WORLD_SIZE = dist.get_world_size(group=None)
         # LOCAL_WORLD_SIZE = torch.cuda.device_count() # does not work bc detects all gpus on node
-        LOCAL_WORLD_SIZE = dist.get_world_size()  # TODO test this for multi node
-        LOCAL_RANK = RANK % LOCAL_WORLD_SIZE
         # or if num nodes in env vars
-        # LOCAL_WORLD_SIZE = WORLD_SIZE // node_count
+        print("num_nodes", num_nodes)
+        LOCAL_WORLD_SIZE = WORLD_SIZE // num_nodes
+        LOCAL_RANK = RANK % LOCAL_WORLD_SIZE
 
         self._set_from_preset_env()
         # self.master_addr = os.environ["SLURM_LAUNCH_NODE_IPADDR"]
@@ -209,6 +209,7 @@ def enable(
     set_cuda_current_device: bool = True,
     overwrite: bool = False,
     allow_nccl_timeout: bool = False,
+    num_nodes: int = 1,
 ):
     """Enable distributed mode
 
@@ -218,7 +219,7 @@ def enable(
         overwrite: If True, overwrites already set variables. Else fails.
     """
 
-    torch_env = _TorchDistributedEnvironment()
+    torch_env = _TorchDistributedEnvironment(num_nodes=num_nodes)
 
     if "SLURM_JOB_ID" in os.environ.keys():
         torch_env._set_from_slurm_env()

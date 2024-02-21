@@ -48,9 +48,7 @@ def get_cfg_from_args(args):
 
 
 def default_setup(args, output_dir, do_eval: bool = False):
-    print("Enabling distr")
-    distributed.enable(overwrite=True)
-    print("Distr enabled")
+    distributed.enable(overwrite=True, num_nodes=args.num_nodes)
     seed = getattr(args, "seed", 0)
     rank = distributed.get_global_rank()
 
@@ -75,6 +73,9 @@ def setup(args, do_eval: bool = False):
 
     args.run_name = args.run_name + f"_{datetime.now().strftime('%d%m%Y_%H%M%S')}"
     cfg = get_cfg_from_args(args)
+    args.run_name = args.run_name + "_" + cfg.student.arch
+    print("args.run_name ", args.run_name)
+
     if len(cfg.train.output_dir) > 4:
         cfg.train.output_dir = os.path.join(cfg.train.output_dir, args.run_name)
     else:
