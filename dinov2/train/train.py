@@ -464,7 +464,7 @@ def main(args):
     torch.backends.cudnn.benchmark = True
     fsdp_modules = get_fsdp_modules(model)
     print(
-        f"------ FSDP: #{len(fsdp_modules)} Modules, {count_parameters(model, with_grad=True)/float(1e6):.5}M parameters total ------"
+        f"------ FSDP: #{len(fsdp_modules)} Modules, {count_parameters(model, with_grad=True)/float(1e6):.5}M trainable parameters ------"
     )
 
     if distributed.is_main_process():

@@ -48,9 +48,7 @@ def get_cfg_from_args(args):
 
 
 def default_setup(args, output_dir, do_eval: bool = False):
-    print("Enabling distr")
     distributed.enable(overwrite=True, num_nodes=args.num_nodes)
-    print("Distr enabled")
     seed = getattr(args, "seed", 0)
     rank = distributed.get_global_rank()
 
