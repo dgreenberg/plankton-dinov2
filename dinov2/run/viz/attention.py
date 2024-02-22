@@ -54,6 +54,9 @@ def get_args_parser(
         type=str,
         help="Image for the visualization",
     )
+    parser.add_argument(
+        "--num_nodes", type=int, default=1, help="Set number of nodes used."
+    )
     return parser
 
 
@@ -145,7 +148,6 @@ def main(args):
     ]
 
     for i, ax in enumerate(axes.flat):
-        print(images[i].size)
         ax.imshow(images[i])
         ax.set_title(titles[i])
         ax.set_xticks([])
