@@ -382,6 +382,13 @@ class DinoVisionTransformer(nn.Module):
             else:
                 return blk(x, return_attention=True)
 
+    def get_poitional_embeddings(self, x, masks=None):
+        if isinstance(x, list):
+            return self.forward_features_list(x, masks)
+
+        x = self.prepare_tokens_with_masks(x, masks)
+        return self.pos_embed
+
     def forward(self, *args, is_training=False, **kwargs):
         ret = self.forward_features(*args, **kwargs)
         if is_training:

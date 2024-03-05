@@ -121,6 +121,12 @@ def main(args):
         attentions, np.mean(attentions, axis=0)[np.newaxis, :, :], axis=0
     )
 
+    # get positional embeddings from model
+
+    pos_embed = model.pos_embed
+    pos_embed = pos_embed[0, 1:, :].cpu().numpy()
+    print(pos_embed.shape)
+
     print(attentions.shape)
     os.makedirs(os.path.join(args.output_dir, args.run_name, "figs"), exist_ok=True)
     fig, axes = plt.subplots(nrows=2, ncols=4, figsize=(12, 6))
