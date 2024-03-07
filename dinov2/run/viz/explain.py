@@ -4,6 +4,7 @@ from typing import List, Optional
 
 import torch
 from PIL import Image
+from torchvision import transforms as pth_transforms
 
 from dinov2.eval.setup import build_model_for_eval
 from dinov2.eval.setup import get_args_parser as get_setup_args_parser
@@ -80,15 +81,48 @@ def main(args):
     model.eval()
 
     original_image = Image.open(args.img_path).convert("RGB")
+    width, height = original_image.size
+    aspect_ratio = width / height if width > height else height / width
+    if width > height:
+        new_width = config.visualization.max_size
+        new_height = int(new_width / aspect_ratio)
+    else:
+        new_height = config.visualization.max_size
+        new_width = int(new_height / aspect_ratio)
+    image_size = (new_height, new_width)
+
+    MEAN = [0.68622917, 0.68622917, 0.68622917]
+    STD = [0.10176649, 0.10176649, 0.10176649]
+
+    transform = pth_transforms.Compose(
+        [
+            pth_transforms.Resize(image_size),
+            pth_transforms.ToTensor(),
+            pth_transforms.Normalize(MEAN, STD),
+        ]
+    )
+    img = transform(original_image)
+
+    patch_size = config.student.patch_size
+
+    # Make the image divisible by the patch size
+    width, height = (
+        img.shape[1] - img.shape[1] % patch_size,
+        img.shape[2] - img.shape[2] % patch_size,
+    )
+    img = img[:, :width, :height].unsqueeze(0)
+
+    width_featmap = img.shape[-2] // patch_size
+    height_featmap = img.shape[-1] // patch_size
 
     if args.xai_method == "raw_attention":
-        raw_attention(args, original_image)
+        raw_attention(args, img)
     elif args.xai_method == "compare_all":
-        compare_all(args, original_image)
+        compare_all(args, img)
     elif args.xai_method == "grad_sam":
-        grad_sam(args, original_image)
+        grad_sam(args, img)
     elif args.xai_method == "rollout":
-        rollout(args, original_image)
+        rollout(args, img)
     else:
         raise NotImplementedError
 
