@@ -14,11 +14,11 @@ from functools import partial
 
 import torch
 import torchvision
+import wandb
 from fvcore.common.checkpoint import PeriodicCheckpointer
 from torch.profiler import ProfilerActivity
 
 import dinov2.distributed as distributed
-import wandb
 from dinov2.data import (
     DataAugmentationDINO,
     MaskingGenerator,
@@ -144,6 +144,8 @@ def select_augmentations(cfg):
             global_crops_size=cfg.crops.global_crops_size,
             local_crops_size=cfg.crops.local_crops_size,
             do_transform_on_gpu=False,
+            patch_size=cfg.student.patch_size,
+            use_native_res=cfg.crops.use_native_res,
         )
         data_transform_gpu = None
     elif cfg.train.augmentations == AugmentationType.TORCHV_GPU.value:
@@ -155,6 +157,8 @@ def select_augmentations(cfg):
             global_crops_size=cfg.crops.global_crops_size,
             local_crops_size=cfg.crops.local_crops_size,
             do_transform_on_gpu=True,
+            patch_size=cfg.student.patch_size,
+            use_native_res=cfg.crops.use_native_res,
         )
     elif cfg.train.augmentations == AugmentationType.KORNIA_GPU.value:
         data_transform_cpu = None
@@ -166,6 +170,8 @@ def select_augmentations(cfg):
             local_crops_size=cfg.crops.local_crops_size,
             do_transform_on_gpu=True,
             use_kornia=True,
+            patch_size=cfg.student.patch_size,
+            use_native_res=cfg.crops.use_native_res,
         )
     else:
         print(
@@ -251,6 +257,7 @@ def do_train(cfg, model, resume=False):
     img_size = cfg.crops.global_crops_size
     patch_size = cfg.student.patch_size
     n_tokens = (img_size // patch_size) ** 2
+    print(f"Number of tokens {n_tokens}")
     mask_generator = MaskingGenerator(
         input_size=(img_size // patch_size, img_size // patch_size),
         max_num_patches=0.5 * img_size // patch_size * img_size // patch_size,

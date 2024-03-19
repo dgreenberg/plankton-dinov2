@@ -3,7 +3,7 @@
 # This source code is licensed under the Apache License, Version 2.0
 # found in the LICENSE file in the root directory of this source tree.
 
-from typing import Any, Sequence, Union
+from typing import Sequence, Union
 
 import torch
 from kornia import augmentation
@@ -57,8 +57,6 @@ class MaybeToTensor(v2.ToTensor):
         return super().__call__(pic)
 
 
-# Use timm's names
-# TODO: update means to our ds?
 IMAGENET_DEFAULT_MEAN = (0.485, 0.456, 0.406)
 IMAGENET_DEFAULT_STD = (0.229, 0.224, 0.225)
 WHOI_DEFAULT_MEAN = (0.68622917, 0.68622917, 0.68622917)

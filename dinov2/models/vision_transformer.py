@@ -109,9 +109,9 @@ class DinoVisionTransformer(nn.Module):
         super().__init__()
         norm_layer = partial(nn.LayerNorm, eps=1e-6)
 
-        self.num_features = (
-            self.embed_dim
-        ) = embed_dim  # num_features for consistency with other models
+        self.num_features = self.embed_dim = (
+            embed_dim  # num_features for consistency with other models
+        )
         self.num_tokens = 1
         self.n_blocks = depth
         self.num_heads = num_heads
@@ -250,7 +250,8 @@ class DinoVisionTransformer(nn.Module):
             )
 
         x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
-        x = x + self.interpolate_pos_encoding(x, w, h)
+        interpolated_pos_embeds = self.interpolate_pos_encoding(x, w, h)
+        x = x + interpolated_pos_embeds
 
         if self.register_tokens is not None:
             x = torch.cat(
@@ -269,6 +270,11 @@ class DinoVisionTransformer(nn.Module):
             self.prepare_tokens_with_masks(x, masks)
             for x, masks in zip(x_list, masks_list)
         ]
+
+        if len(x) < self.num_tokens:
+            # Add padding tokens to reach fixed len
+            x = self.pad_token_list_to_fixed_len(x, masks_list[0])
+
         for blk in self.blocks:
             x = blk(x)
 
@@ -287,11 +293,37 @@ class DinoVisionTransformer(nn.Module):
             )
         return output
 
+    def pad_token_list_to_fixed_len(self, token_list: list, masks=None):
+        # token_list: B x N_var D
+        token_nested_tensor = torch.nested.nested_tensor(token_list)
+        token_padded_tensor = torch.nested.to_padded_tensor(token_nested_tensor, 0.0)
+        # mask added pads --> TODO: Revikew this as pads could be used as registers
+        if masks is not None:
+            token_padded_tensor = torch.where(
+                token_padded_tensor == 0.0,
+                self.mask_token.to(token_padded_tensor.dtype).unsqueeze(0),
+                token_padded_tensor,
+            )
+        return token_padded_tensor
+
+    def pad_token_tensor_to_fixed_len(self, token_tensor: torch.Tensor):
+        # Useless bc Tensor has regular dimensions??
+        b, curr_n, d = token_tensor.shape
+        # token_tensor: B N D
+        n_pad_tokens = self.num_tokens - curr_n
+
+        pad_tokens = torch.ones(b, n_pad_tokens, d)
+        return torch.cat([token_tensor, pad_tokens], dim=1)
+
     def forward_features(self, x, masks=None):
         if isinstance(x, list):
             return self.forward_features_list(x, masks)
 
         x = self.prepare_tokens_with_masks(x, masks)
+
+        if x.shape[1] < self.num_tokens:
+            # Add padding tokens to reach fixed len
+            x = self.pad_token_tensor_to_fixed_len(x)
 
         for blk in self.blocks:
             x = blk(x)
