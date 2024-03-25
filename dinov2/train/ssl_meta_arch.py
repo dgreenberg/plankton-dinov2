@@ -336,7 +336,7 @@ class SSLMetaArch(nn.Module):
             student_local_backbone_output_dict,
         ) = self.student.backbone(
             [global_crops, local_crops], masks=[masks, None], is_training=True
-        )
+        )  # only student global crops are masked
 
         inputs_for_student_head_list = []
 
@@ -468,9 +468,9 @@ class SSLMetaArch(nn.Module):
     def fsdp_synchronize_streams(self):
         if self.need_to_synchronize_fsdp_streams:
             torch.cuda.synchronize()
-            self.student.dino_head._streams = (
-                self.teacher.dino_head._streams
-            ) = self.student.backbone._streams = self.teacher.backbone._streams
+            self.student.dino_head._streams = self.teacher.dino_head._streams = (
+                self.student.backbone._streams
+            ) = self.teacher.backbone._streams
             self.need_to_synchronize_fsdp_streams = False
 
     def update_teacher(self, m):

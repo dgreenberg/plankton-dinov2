@@ -242,8 +242,10 @@ class DinoVisionTransformer(nn.Module):
         )
 
     def prepare_tokens_with_masks(self, x, masks=None):
+        print("B, c, w, h", x.shape)
         B, nc, w, h = x.shape
         x = self.patch_embed(x)
+        print("post patch embed: x.shape", x.shape)
         if masks is not None:
             x = torch.where(
                 masks.unsqueeze(-1), self.mask_token.to(x.dtype).unsqueeze(0), x
@@ -270,11 +272,18 @@ class DinoVisionTransformer(nn.Module):
             self.prepare_tokens_with_masks(x, masks)
             for x, masks in zip(x_list, masks_list)
         ]
-
-        if len(x) < self.num_tokens:
-            # Add padding tokens to reach fixed len
-            x = self.pad_token_list_to_fixed_len(x, masks_list[0])
-
+        # x_list = [global_crops, local_crops]
+        # masks_list = [masks, None]
+        # x[0] = B C H W
+        """
+        x = [
+            self.pad_token_list_to_fixed_len(x, mask)
+            for el, mask in zip(x_list, masks_list)
+            if el.shape[1] < self.num_tokens
+        ]
+        # Add padding tokens to reach fixed len
+        """
+        print("aa", len(x), x[1].shape)
         for blk in self.blocks:
             x = blk(x)
 
@@ -297,7 +306,7 @@ class DinoVisionTransformer(nn.Module):
         # token_list: B x N_var D
         token_nested_tensor = torch.nested.nested_tensor(token_list)
         token_padded_tensor = torch.nested.to_padded_tensor(token_nested_tensor, 0.0)
-        # mask added pads --> TODO: Revikew this as pads could be used as registers
+        # mask added pads --> TODO: Review this as pads could be used as registers
         if masks is not None:
             token_padded_tensor = torch.where(
                 token_padded_tensor == 0.0,

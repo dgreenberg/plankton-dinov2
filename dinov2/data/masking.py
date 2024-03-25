@@ -49,6 +49,10 @@ class MaskingGenerator:
     def get_shape(self):
         return self.height, self.width
 
+    def set_shape(self, height: int, width: int):
+        self.height = height
+        self.width = width
+
     def _mask(self, mask, max_mask_patches):
         delta = 0
         for _ in range(10):

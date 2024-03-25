@@ -343,8 +343,6 @@ class DataAugmentationDINO(object):
     def __call__(self, image):
         # image : C H W
         output = {}
-
-        print("__call__ aug", image.shape)
         image = self.pad_to_patch_mutiple(image)
         # global crops:
         if self.use_native_res:
@@ -358,7 +356,7 @@ class DataAugmentationDINO(object):
         im2_base = self.geometric_augmentation_global(image_global)
         global_crop_2 = self.global_transfo2(im2_base)
 
-        output["global_crops"] = [global_crop_1, global_crop_2]
+        output["global_crops"] = torch.cat([global_crop_1, global_crop_2], dim=0)
 
         # global crops for teacher:
         # output["global_crops_teacher"] = [global_crop_1, global_crop_2]
@@ -394,9 +392,10 @@ class DataAugmentationDINO(object):
                 # Select non-zero 14x14 patches from local_crops and flat concat
                 # Input: list N x [C H W]
                 # Output: C P NxP
-
+                tot_patches = 0
                 list_flat_patches = []
-                for local_crop in local_crops:
+                crop_id_list = []
+                for i, local_crop in enumerate(local_crops):
                     if len(local_crop.shape) > 3:
                         local_crop = local_crop[0]
 
@@ -407,33 +406,45 @@ class DataAugmentationDINO(object):
                     ).unfold(2, self.patch_size, self.patch_size)
                     unfold_shape = patches.size()
 
-                    # C, x1, x2, P, P
+                    # c x1 x2 p p
                     patches = patches.reshape(
                         C,
                         unfold_shape[1] * unfold_shape[2] * self.patch_size,
                         self.patch_size,
-                    ).permute((0, 2, 1))  # C P N*P
+                    )  # c (n p) p
 
                     selected_patches = []
-                    for patch_idx in range(0, patches.shape[2], self.patch_size):
-                        patch = patches[
-                            :, :, patch_idx : patch_idx + self.patch_size
-                        ]  # C P P
+                    patches_list = patches.chunk(
+                        patches.shape[1] // self.patch_size, dim=1
+                    )
+                    for patch in patches_list:  # C P P
                         if (
-                            abs(torch.mean(patch)) > 1e-5
-                        ):  # <= 1e-5 is probably uninformative
+                            abs(torch.mean(patch)) > 1e-4
+                        ):  # <= 1e-4 is probably uninformative
                             selected_patches.append(patch.transpose(-1, -2))
 
+                    curr_nb_patches = len(selected_patches)
+                    tot_patches += curr_nb_patches
+
+                    crop_id_list.append(torch.ones(curr_nb_patches) * i)
+                    """
+                    # TODO: anticipate packing
+                    if tot_patches > max_patches:
+                        break
+                    """
                     selected_patches = torch.concat(
-                        selected_patches, dim=-1
-                    )  # C P N_new*P
+                        selected_patches, dim=1
+                    )  # c (n_p p) p
 
                     list_flat_patches.append(selected_patches)
-                # concat along last dim: C P NxP
-                return torch.concat(list_flat_patches, dim=-1)
+                flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
+                crop_ids = torch.cat(crop_id_list)  # (n_crop n_p p)
+                return flat_patches, crop_ids
 
-            output["local_crops_vis"] = fragments
-            output["local_crops"] = select_and_concat_nonzero_patches(fragments)
+            flat_patches, crop_ids = select_and_concat_nonzero_patches(fragments)
+            output["local_crops_vis"] = fragments  # for visualization
+            output["local_crops"] = flat_patches
+            output["crop_ids"] = crop_ids
             output["pooled_seg"] = pooled_seg
             output["bboxes"] = bboxes
         else:
@@ -441,9 +452,8 @@ class DataAugmentationDINO(object):
                 self.local_transfo(self.geometric_augmentation_local(image))
                 for _ in range(self.local_crops_number)
             ]
-            output["local_crops"] = [
-                self.local_transfo(local_crop) for local_crop in local_crops
-            ]
+            output["local_crops"] = torch.cat(
+                [self.local_transfo(local_crop) for local_crop in local_crops], dim=0
+            )
         output["offsets"] = ()
-
         return output
