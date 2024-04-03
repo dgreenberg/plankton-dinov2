@@ -20,11 +20,29 @@ def collate_data_and_cast(
     free_shapes=False,
     patch_size=14,
 ):
+    attn_mask_lc = attn_mask_gc = None
     # samples dict_keys(['global_crops', 'global_crops_teacher', 'local_crops', 'offsets'])
     # from b (nb_crops c h w) OR b (nb_crops c p nxp) to (b nc) c p np
     # nb crops goes with batch size ie: b nc -> (b nc)
-    if isinstance(samples[0], dict):  # on gpu and with free_shapes
+    if isinstance(samples, dict):
+        B, nc, c, h, w = samples["global_crops"].size()
+        collated_global_crops = rearrange(
+            samples["global_crops"],
+            "b nc c h w -> (b nc) c h w",
+            c=c,
+            b=B,
+        )
+        collated_local_crops = rearrange(
+            samples["local_crops"],
+            "b nc c h w -> (b nc) c h w",
+            c=c,
+            b=B,
+        )
+        B = nc * B  # we define a new pseudo batch size
+
+    elif isinstance(samples[0], dict):  # on gpu and with free_shapes
         nc, c, h, w = samples[0]["global_crops"].size()
+
         collated_global_crops = [
             rearrange(
                 el["global_crops"],
@@ -35,21 +53,30 @@ def collate_data_and_cast(
             )
             for el in samples
         ]
-        print("min shape b4 pad: ", min([el.shape[0] for el in collated_global_crops]))
+        gc_len_list = [
+            el.shape[0] // patch_size + 1  # + 1 for cls token
+            for el in collated_global_crops
+            for _ in range(el.shape[1])
+        ]  # len=B*nc
+
         collated_global_crops = pad_sequence(collated_global_crops, batch_first=True)
-        print(collated_global_crops.shape)  # 4, 4004, 2, 3, 14
+        gc_padded_len = collated_global_crops.shape[1] // patch_size + 1
         collated_global_crops = rearrange(
             collated_global_crops, "b np nc c p -> (b nc) c p np", p=patch_size
         )
+        # LOCAL CROPS
         collated_local_crops = map(
             lambda t: rearrange(t["local_crops"], "c np p -> np c p", p=patch_size),
             samples,
         )  # np = (np nc), have to put the unequal dim (np) first for pad_sequence()
         collated_local_crops = pad_sequence(collated_local_crops, batch_first=True)
+        lc_padded_len = collated_local_crops.shape[1] // patch_size + 1
+        lc_len_list = [
+            [el // patch_size + 1 for el in el["local_crop_len"]] for el in samples
+        ]
         collated_local_crops = rearrange(
             collated_local_crops, "b np c p -> b c p np", p=patch_size
         )
-        print("glob, loc", collated_global_crops.shape, collated_local_crops.shape)
         B = collated_global_crops.size(0)
 
     else:  # on cpu
@@ -97,6 +124,35 @@ def collate_data_and_cast(
         .expand_as(collated_masks)[collated_masks]
     )
 
+    """
+    if free_shapes:  # masking attention to prohibit cross-attending across patches
+        attn_mask_gc = [
+            torch.block_diag(
+                torch.ones((len, len)),
+                torch.zeros((gc_padded_len - len, gc_padded_len - len)),
+            )
+            if gc_padded_len > len
+            else torch.ones((len, len))
+            for len in gc_len_list
+        ]
+        attn_mask_gc = torch.stack(attn_mask_gc).bool()
+
+        attn_mask_lc = []
+        for lc_lens in lc_len_list:
+            A = [torch.ones((el, el)) for el in lc_lens]
+            pad_len = lc_padded_len - sum(lc_lens)
+            pad_border = torch.zeros((pad_len, pad_len))
+            attn_mask_lc.append(torch.block_diag(*A, pad_border))
+        attn_mask_lc = torch.stack(attn_mask_lc).bool()
+        '''
+        attn_mask = rearrange(batched_image_ids, "b i -> b 1 i 1") == rearrange(
+            batched_image_ids, "b j -> b 1 1 j"
+        )
+        attn_mask = attn_mask & rearrange(key_pad_mask, "b j -> b 1 1 j")
+        '''
+    else:
+        attn_mask_lc = attn_mask_gc = None
+    """
     return {
         "collated_global_crops": collated_global_crops.to(dtype),
         "collated_local_crops": collated_local_crops.to(dtype),
@@ -107,4 +163,6 @@ def collate_data_and_cast(
         "n_masked_patches": torch.full(
             (1,), fill_value=mask_indices_list.shape[0], dtype=torch.long
         ),
+        "attn_mask_gc": attn_mask_gc,
+        "attn_mask_lc": attn_mask_lc,
     }

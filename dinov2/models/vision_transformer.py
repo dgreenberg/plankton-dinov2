@@ -50,9 +50,9 @@ def named_apply(
 
 
 class BlockChunk(nn.ModuleList):
-    def forward(self, x):
+    def forward(self, x, attn_mask=None):
         for b in self:
-            x = b(x)
+            x = b(x, attn_mask)
         return x
 
 
@@ -242,10 +242,9 @@ class DinoVisionTransformer(nn.Module):
         )
 
     def prepare_tokens_with_masks(self, x, masks=None):
-        print("B, c, w, h", x.shape)
+        # b c w h OR b c p (n p)
         B, nc, w, h = x.shape
-        x = self.patch_embed(x)
-        print("post patch embed: x.shape", x.shape)
+        x = self.patch_embed(x)  # b n d (=384)
         if masks is not None:
             x = torch.where(
                 masks.unsqueeze(-1), self.mask_token.to(x.dtype).unsqueeze(0), x
@@ -267,7 +266,7 @@ class DinoVisionTransformer(nn.Module):
 
         return x
 
-    def forward_features_list(self, x_list, masks_list):
+    def forward_features_list(self, x_list, masks_list, attn_mask_list=None):
         x = [
             self.prepare_tokens_with_masks(x, masks)
             for x, masks in zip(x_list, masks_list)
@@ -283,9 +282,8 @@ class DinoVisionTransformer(nn.Module):
         ]
         # Add padding tokens to reach fixed len
         """
-        print("aa", len(x), x[1].shape)
         for blk in self.blocks:
-            x = blk(x)
+            x = blk(x, attn_mask=attn_mask_list)
 
         all_x = x
         output = []
@@ -324,18 +322,20 @@ class DinoVisionTransformer(nn.Module):
         pad_tokens = torch.ones(b, n_pad_tokens, d)
         return torch.cat([token_tensor, pad_tokens], dim=1)
 
-    def forward_features(self, x, masks=None):
+    def forward_features(self, x, masks=None, attn_masks=None):
         if isinstance(x, list):
-            return self.forward_features_list(x, masks)
+            return self.forward_features_list(x, masks, attn_masks)
 
         x = self.prepare_tokens_with_masks(x, masks)
 
+        """ # Already done in collate
         if x.shape[1] < self.num_tokens:
             # Add padding tokens to reach fixed len
             x = self.pad_token_tensor_to_fixed_len(x)
+        """
 
         for blk in self.blocks:
-            x = blk(x)
+            x = blk(x, attn_masks)
 
         x_norm = self.norm(x)
         return {

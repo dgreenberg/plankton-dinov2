@@ -65,6 +65,17 @@ class DINOLoss(nn.Module):
     def forward(self, student_output_list, teacher_out_softmaxed_centered_list):
         """
         Cross-entropy between softmax outputs of the teacher and student networks.
+        len of input lists = Nb local and global crops
+        sizes = B D
+        """
+        """
+        print(
+            "loss ",
+            len(student_output_list),
+            [el.shape for el in student_output_list],
+            len(teacher_out_softmaxed_centered_list),
+            [el.shape for el in teacher_out_softmaxed_centered_list],
+        )
         """
         # TODO: Use cross_entropy_distribution here
         total_loss = 0

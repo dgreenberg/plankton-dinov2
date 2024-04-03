@@ -27,3 +27,9 @@ logs/
 notebooks/test_nb.ipynb
 .DS_Store
 notebooks/test_nb.ipynb
+notebooks/*.jpg
+notebooks/seg_examples_Quickshift.jpg
+notebooks/seg_examples_Felzenschwalb.jpg
+notebooks/seg_examples_Quickshift.jpg
+notebooks/seg_examples_SLIC.jpg
+notebooks/segmentations.jpg

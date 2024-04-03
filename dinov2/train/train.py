@@ -42,6 +42,7 @@ logger = logging.getLogger("dinov2")
 
 class AugmentationType(Enum):
     KORNIA_GPU = "kornia_gpu"
+    KORNIA_CPU = "kornia_cpu"
     TORCHV_CPU = "torchvision_cpu"
     TORCHV_GPU = "torchvision_gpu"
 
@@ -136,43 +137,31 @@ def build_schedulers(cfg):
 
 def select_augmentations(cfg):
     print(f"---- USING AUGMENTATION: {cfg.train.augmentations} ----")
+    aug_kwargs = {
+        "global_crops_scale": cfg.crops.global_crops_scale,
+        "local_crops_scale": cfg.crops.local_crops_scale,
+        "local_crops_number": cfg.crops.local_crops_number,
+        "global_crops_size": cfg.crops.global_crops_size,
+        "local_crops_size": cfg.crops.local_crops_size,
+        "patch_size": cfg.student.patch_size,
+        "use_native_res": cfg.crops.use_native_res,
+        "do_seg_crops": cfg.crops.free_shapes,
+    }
     if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
-        data_transform_cpu = DataAugmentationDINO(
-            cfg.crops.global_crops_scale,
-            cfg.crops.local_crops_scale,
-            cfg.crops.local_crops_number,
-            global_crops_size=cfg.crops.global_crops_size,
-            local_crops_size=cfg.crops.local_crops_size,
-            do_transform_on_gpu=False,
-            patch_size=cfg.student.patch_size,
-            use_native_res=cfg.crops.use_native_res,
-        )
+        data_transform_cpu = DataAugmentationDINO(use_kornia=False, **aug_kwargs)
         data_transform_gpu = None
+
     elif cfg.train.augmentations == AugmentationType.TORCHV_GPU.value:
         data_transform_cpu = None
-        data_transform_gpu = DataAugmentationDINO(
-            cfg.crops.global_crops_scale,
-            cfg.crops.local_crops_scale,
-            cfg.crops.local_crops_number,
-            global_crops_size=cfg.crops.global_crops_size,
-            local_crops_size=cfg.crops.local_crops_size,
-            do_transform_on_gpu=True,
-            patch_size=cfg.student.patch_size,
-            use_native_res=cfg.crops.use_native_res,
-        )
+        data_transform_gpu = DataAugmentationDINO(use_kornia=False, **aug_kwargs)
+
     elif cfg.train.augmentations == AugmentationType.KORNIA_GPU.value:
         data_transform_cpu = None
-        data_transform_gpu = DataAugmentationDINO(
-            cfg.crops.global_crops_scale,
-            cfg.crops.local_crops_scale,
-            cfg.crops.local_crops_number,
-            global_crops_size=cfg.crops.global_crops_size,
-            local_crops_size=cfg.crops.local_crops_size,
-            do_transform_on_gpu=True,
-            use_kornia=True,
-            patch_size=cfg.student.patch_size,
-            use_native_res=cfg.crops.use_native_res,
-        )
+        data_transform_gpu = DataAugmentationDINO(use_kornia=True, **aug_kwargs)
+
+    elif cfg.train.augmentations == AugmentationType.KORNIA_CPU.value:
+        data_transform_cpu = DataAugmentationDINO(use_kornia=True, **aug_kwargs)
+        data_transform_gpu = None
     else:
         print(
             f"ERROR: type augmentation type {cfg.train.augmentations} is not supported"
@@ -272,6 +261,7 @@ def do_train(cfg, model, resume=False):
         n_tokens=n_tokens,
         mask_generator=mask_generator,
         dtype=inputs_dtype,
+        free_shapes=cfg.crops.free_shapes,
     )
 
     # setup data loader
@@ -285,30 +275,29 @@ def do_train(cfg, model, resume=False):
     )
     # sampler_type = SamplerType.INFINITE
     sampler_type = SamplerType.SHARDED_INFINITE
+    dl_kwargs = {
+        "dataset": dataset,
+        "batch_size": cfg.train.batch_size_per_gpu,
+        "num_workers": cfg.train.num_workers,
+        "shuffle": True,
+        "seed": start_iter,  # TODO: Fix this -- cfg.train.seed
+        "sampler_type": sampler_type,
+        "sampler_advance": 0,  # TODO(qas): fix this -- start_iter * cfg.train.batch_size_per_gpu,
+        "drop_last": True,
+    }
     if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
-        data_loader = make_data_loader(
-            dataset=dataset,
-            batch_size=cfg.train.batch_size_per_gpu,
-            num_workers=cfg.train.num_workers,
-            shuffle=True,
-            seed=start_iter,  # TODO: Fix this -- cfg.train.seed
-            sampler_type=sampler_type,
-            sampler_advance=0,  # TODO(qas): fix this -- start_iter * cfg.train.batch_size_per_gpu,
-            drop_last=True,
-            collate_fn=collate_fn,
-        )
+        data_loader = make_data_loader(collate_fn=collate_fn, **dl_kwargs)
+    elif cfg.crops.free_shapes or cfg.crops.use_native_res:
+
+        def list_collate(batch):
+            data = [item[0] for item in batch]
+            target = [item[1] for item in batch]
+            target = torch.LongTensor(target)
+            return [data, target]
+
+        data_loader = make_data_loader(collate_fn=list_collate, **dl_kwargs)
     else:
-        data_loader = make_data_loader(
-            dataset=dataset,
-            batch_size=cfg.train.batch_size_per_gpu,
-            num_workers=cfg.train.num_workers,
-            shuffle=True,
-            seed=start_iter,  # TODO: Fix this -- cfg.train.seed
-            sampler_type=sampler_type,
-            sampler_advance=0,  # TODO(qas): fix this -- start_iter * cfg.train.batch_size_per_gpu,
-            drop_last=True,
-            collate_fn=None,
-        )
+        data_loader = make_data_loader(collate_fn=None, **dl_kwargs)
 
     # training loop
 
@@ -343,12 +332,15 @@ def do_train(cfg, model, resume=False):
     ):
         if cfg.train.do_profiling:
             profiler.step()
-        if data_transform_gpu is not None:
+        if (
+            data_transform_gpu is not None
+            or cfg.train.augmentations == AugmentationType.KORNIA_CPU.value
+        ):
             # current_device_nb = model.student.backbone.device
             if isinstance(data, list):
                 data = data[0]
-            data = data.to(device=f"cuda:{torch.cuda.current_device()}")
-            data = data_transform_gpu(data)
+            if data_transform_gpu is not None:
+                data = data_transform_gpu(data)
             data = collate_fn(
                 data
             )  # collate_fn collates crops and computes masks tensors

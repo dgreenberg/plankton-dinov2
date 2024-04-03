@@ -11,7 +11,11 @@ import logging
 import os
 import warnings
 
+import torch
+from einops import rearrange
 from torch import Tensor, nn
+
+from dinov2.utils.utils import exists
 
 logger = logging.getLogger("dinov2")
 
@@ -57,7 +61,7 @@ class Attention(nn.Module):
             self.qkv(x)
             .reshape(B, N, 3, self.num_heads, C // self.num_heads)
             .permute(2, 0, 3, 1, 4)
-        )
+        )  # 3 b h n d
 
         q, k, v = qkv[0] * self.scale, qkv[1], qkv[2]
         attn = q @ k.transpose(-2, -1)
@@ -72,7 +76,31 @@ class Attention(nn.Module):
 
 
 class MemEffAttention(Attention):
-    def forward(self, x: Tensor, attn_bias=None) -> Tensor:
+    def masked_mem_eff_attn(
+        self, query, key, value, attn_bias=None, attn_mask=None, mask=None
+    ):
+        scale = 1 / query.shape[-1] ** 0.5
+        query = query * scale
+        attn = query @ key.transpose(-2, -1)
+
+        # b n n_heads c//n_heads = b n h d
+        if exists(mask):
+            mask = rearrange(mask, "b j -> b 1 1 j")
+            attn = attn.masked_fill(~mask, -torch.finfo(attn.dtype).max)
+
+        if exists(attn_mask):
+            attn = attn.masked_fill(~attn_mask, -torch.finfo(attn.dtype).max)
+
+        if attn_bias is not None:
+            attn = (
+                attn + attn_bias
+            )  # invalid types for +: 'Tensor' and 'BlockDiagonalMask'
+
+        attn = attn.softmax(-1)
+        # attn = F.dropout(attn, p) # p = 0.0 per default
+        return attn @ value
+
+    def forward(self, x: Tensor, attn_bias=None, attn_mask=None) -> Tensor:
         if not XFORMERS_AVAILABLE:
             if attn_bias is not None:
                 raise AssertionError("xFormers is required for using nested tensors")
@@ -83,7 +111,14 @@ class MemEffAttention(Attention):
 
         q, k, v = unbind(qkv, 2)
 
-        x = memory_efficient_attention(q, k, v, attn_bias=attn_bias)
+        if exists(attn_mask):
+            q, k, v = q.transpose(1, 2), k.transpose(1, 2), v.transpose(1, 2)
+            # b n h d -> b h n d, h=self.heads, for our own impl of masked attention
+            x = self.masked_mem_eff_attn(
+                q, k, v, attn_bias=attn_bias, attn_mask=attn_mask, mask=None
+            )
+        else:
+            x = memory_efficient_attention(q, k, v, attn_bias=attn_bias)
         x = x.reshape([B, N, C])
 
         x = self.proj(x)

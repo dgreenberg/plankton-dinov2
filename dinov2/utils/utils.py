@@ -20,6 +20,12 @@ from torchvision.transforms.functional import InterpolationMode, resize
 logger = logging.getLogger("dinov2")
 
 
+def exists(val):
+    if isinstance(val, list):
+        return all([exists(el) for el in val])
+    return val is not None
+
+
 def resize_pos_embed(pos_embed, input_shape, pos_shape, mode):
     """Resize pos_embed weights.
 

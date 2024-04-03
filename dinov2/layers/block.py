@@ -15,6 +15,8 @@ from typing import Any, Callable, Dict, List, Tuple
 import torch
 from torch import Tensor, nn
 
+from dinov2.utils.utils import exists
+
 from .attention import Attention, MemEffAttention
 from .drop_path import DropPath
 from .layer_scale import LayerScale
@@ -89,9 +91,9 @@ class Block(nn.Module):
 
         self.sample_drop_ratio = drop_path
 
-    def forward(self, x: Tensor) -> Tensor:
-        def attn_residual_func(x: Tensor) -> Tensor:
-            return self.ls1(self.attn(self.norm1(x)))
+    def forward(self, x: Tensor, attn_mask: Tensor = None) -> Tensor:
+        def attn_residual_func(x: Tensor, attn_mask: Tensor = None) -> Tensor:
+            return self.ls1(self.attn(self.norm1(x), attn_mask=attn_mask))
 
         def ffn_residual_func(x: Tensor) -> Tensor:
             return self.ls2(self.mlp(self.norm2(x)))
@@ -109,10 +111,10 @@ class Block(nn.Module):
                 sample_drop_ratio=self.sample_drop_ratio,
             )
         elif self.training and self.sample_drop_ratio > 0.0:
-            x = x + self.drop_path1(attn_residual_func(x))
+            x = x + self.drop_path1(attn_residual_func(x, attn_mask))
             x = x + self.drop_path1(ffn_residual_func(x))  # FIXME: drop_path2
         else:
-            x = x + attn_residual_func(x)
+            x = x + attn_residual_func(x, attn_mask)
             x = x + ffn_residual_func(x)
         return x
 
@@ -175,6 +177,7 @@ attn_bias_cache: Dict[Tuple, Any] = {}
 def get_attn_bias_and_cat(x_list, branges=None):
     """
     this will perform the index select, cat the tensors, and provide the attn_bias from cache
+    Attn bias inhibits cross-attentding across patches
     """
     batch_sizes = (
         [b.shape[0] for b in branges]
@@ -207,6 +210,7 @@ def drop_add_residual_stochastic_depth_list(
     residual_func: Callable[[Tensor, Any], Tensor],
     sample_drop_ratio: float = 0.0,
     scaling_vector=None,
+    attn_mask=None,
 ) -> Tensor:
     # 1) generate random set of indices for dropping samples in the batch
     branges_scales = [
@@ -219,7 +223,9 @@ def drop_add_residual_stochastic_depth_list(
     attn_bias, x_cat = get_attn_bias_and_cat(x_list, branges)
 
     # 3) apply residual_func to get residual, and split the result
-    residual_list = attn_bias.split(residual_func(x_cat, attn_bias=attn_bias))  # type: ignore
+    residual_list = attn_bias.split(
+        residual_func(x_cat, attn_bias=attn_bias, attn_mask=attn_mask)
+    )  # type: ignore
 
     outputs = []
     for x, brange, residual, residual_scale_factor in zip(
@@ -234,7 +240,9 @@ def drop_add_residual_stochastic_depth_list(
 
 
 class NestedTensorBlock(Block):
-    def forward_nested(self, x_list: List[Tensor]) -> List[Tensor]:
+    def forward_nested(
+        self, x_list: List[Tensor], attn_mask: List[Tensor] = None
+    ) -> List[Tensor]:
         """
         x_list contains a list of tensors to nest together and run
         """
@@ -242,10 +250,14 @@ class NestedTensorBlock(Block):
 
         if self.training and self.sample_drop_ratio > 0.0:
 
-            def attn_residual_func(x: Tensor, attn_bias=None) -> Tensor:
-                return self.attn(self.norm1(x), attn_bias=attn_bias)
+            def attn_residual_func(
+                x: Tensor, attn_bias: Tensor = None, attn_mask: Tensor = None
+            ) -> Tensor:
+                return self.attn(
+                    self.norm1(x), attn_bias=attn_bias, attn_mask=attn_mask
+                )
 
-            def ffn_residual_func(x: Tensor, attn_bias=None) -> Tensor:
+            def ffn_residual_func(x: Tensor) -> Tensor:
                 return self.mlp(self.norm2(x))
 
             x_list = drop_add_residual_stochastic_depth_list(
@@ -255,6 +267,7 @@ class NestedTensorBlock(Block):
                 scaling_vector=self.ls1.gamma
                 if isinstance(self.ls1, LayerScale)
                 else None,
+                attn_mask=attn_mask,
             )
             x_list = drop_add_residual_stochastic_depth_list(
                 x_list,
@@ -263,27 +276,38 @@ class NestedTensorBlock(Block):
                 scaling_vector=self.ls2.gamma
                 if isinstance(self.ls1, LayerScale)
                 else None,
+                attn_mask=attn_mask,
             )
             return x_list
         else:
 
-            def attn_residual_func(x: Tensor, attn_bias=None) -> Tensor:
-                return self.ls1(self.attn(self.norm1(x), attn_bias=attn_bias))
+            def attn_residual_func(x: Tensor, attn_bias=None, attn_mask=None) -> Tensor:
+                return self.ls1(
+                    self.attn(self.norm1(x), attn_bias=attn_bias, attn_mask=attn_mask)
+                )
 
-            def ffn_residual_func(x: Tensor, attn_bias=None) -> Tensor:
+            def ffn_residual_func(x: Tensor) -> Tensor:
                 return self.ls2(self.mlp(self.norm2(x)))
 
             attn_bias, x = get_attn_bias_and_cat(x_list)
-            x = x + attn_residual_func(x, attn_bias=attn_bias)
+
+            if exists(attn_mask):
+                attn_mask = torch.cat(attn_mask, dim=0)
+                attn_mask_list = [
+                    el[0, :, :] for el in torch.split(attn_mask, 1, dim=0)
+                ]
+                attn_mask = torch.block_diag(*attn_mask_list)
+                # print("x, attn_mask", x.shape, attn_mask.shape)
+            x = x + attn_residual_func(x, attn_bias=attn_bias, attn_mask=attn_mask)
             x = x + ffn_residual_func(x)
             return attn_bias.split(x)
 
-    def forward(self, x_or_x_list):
+    def forward(self, x_or_x_list, attn_mask=None):
         if isinstance(x_or_x_list, Tensor):
-            return super().forward(x_or_x_list)
+            return super().forward(x_or_x_list, attn_mask)
         elif isinstance(x_or_x_list, list):
             if not XFORMERS_AVAILABLE:
                 raise AssertionError("xFormers is required for using nested tensors")
-            return self.forward_nested(x_or_x_list)
+            return self.forward_nested(x_or_x_list, attn_mask)
         else:
             raise AssertionError

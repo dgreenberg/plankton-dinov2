@@ -20,7 +20,7 @@ from dinov2.loss import DINOLoss, KoLeoLoss, iBOTPatchLoss
 from dinov2.models import build_model_from_cfg
 from dinov2.models.vision_transformer import BlockChunk
 from dinov2.utils.param_groups import fuse_params_groups, get_params_groups_with_decay
-from dinov2.utils.utils import has_batchnorms, load_pretrained_weights
+from dinov2.utils.utils import exists, has_batchnorms, load_pretrained_weights
 
 try:
     from xformers.ops import fmha
@@ -172,6 +172,7 @@ class SSLMetaArch(nn.Module):
         n_global_crops = 2
         n_local_crops = self.cfg.crops.local_crops_number
 
+        attn_mask_gc = attn_mask_gc = None
         if not images["collated_global_crops"].is_cuda:
             global_crops = images["collated_global_crops"].cuda(non_blocking=True)
             local_crops = images["collated_local_crops"].cuda(non_blocking=True)
@@ -183,7 +184,10 @@ class SSLMetaArch(nn.Module):
             mask_indices_list = images["mask_indices_list"].cuda(non_blocking=True)
             n_masked_patches_tensor = images["n_masked_patches"].cuda(non_blocking=True)
             masks_weight = images["masks_weight"].cuda(non_blocking=True)
-
+            if exists(images["attn_mask_gc"]):
+                attn_mask_gc = images["attn_mask_gc"].cuda(non_blocking=True)
+            if exists(images["attn_mask_gc"]):
+                attn_mask_lc = images["attn_mask_lc"].cuda(non_blocking=True)
         else:
             global_crops = images["collated_global_crops"]
             local_crops = images["collated_local_crops"]
@@ -193,7 +197,10 @@ class SSLMetaArch(nn.Module):
             mask_indices_list = images["mask_indices_list"]
             n_masked_patches_tensor = images["n_masked_patches"]
             masks_weight = images["masks_weight"]
+            attn_mask_gc = images["attn_mask_gc"]
+            attn_mask_lc = images["attn_mask_lc"]
 
+        # print("ssl ", global_crops.shape, local_crops.shape)
         n_masked_patches = mask_indices_list.shape[0]
         upperbound = images["upperbound"]
 
@@ -210,7 +217,9 @@ class SSLMetaArch(nn.Module):
         @torch.no_grad()
         def get_teacher_output():
             teacher_backbone_output_dict = self.teacher.backbone(
-                global_crops, is_training=True
+                global_crops,
+                is_training=True,
+                attn_masks=attn_mask_gc,
             )
             teacher_cls_tokens = teacher_backbone_output_dict["x_norm_clstoken"]
             teacher_cls_tokens = teacher_cls_tokens.chunk(n_global_crops)
@@ -335,7 +344,10 @@ class SSLMetaArch(nn.Module):
             student_global_backbone_output_dict,
             student_local_backbone_output_dict,
         ) = self.student.backbone(
-            [global_crops, local_crops], masks=[masks, None], is_training=True
+            [global_crops, local_crops],
+            masks=[masks, None],
+            is_training=True,
+            attn_masks=[attn_mask_gc, attn_mask_lc],
         )  # only student global crops are masked
 
         inputs_for_student_head_list = []

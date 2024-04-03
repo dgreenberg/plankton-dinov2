@@ -234,7 +234,7 @@ class DataAugmentationDINO(object):
                 single_image.size(-1) > self.global_crops_size
                 and single_image.size(-2) > self.global_crops_size
             ):
-                single_image = self.random_crop(single_image)
+                single_image = self.random_crop(single_image).squeeze()
             else:
                 crop_y = int(self.global_crops_area / single_image.size(-1))
                 crop_x = int(self.global_crops_area / single_image.size(-2))
@@ -268,9 +268,17 @@ class DataAugmentationDINO(object):
         segments_fz = felzenszwalb(
             image.permute((1, 2, 0)), scale=300, sigma=0.5, min_size=1000
         )
+        # TODO: experiment with SLIC seg
+        segments_slic = slic(
+            image.permute((1, 2, 0)),
+            n_segments=5,
+            compactness=10,
+            sigma=1.0,
+            start_label=1,
+        )
 
         def seg_to_patched_seg(segments, image_gray):
-            segments = segments / segments.max()
+            segments = segments / (segments.max() + 1e-5)
             conv_input = torch.tensor(
                 segments[None, :, :]
             )  # on color images segments can be 3 H W?
@@ -291,10 +299,17 @@ class DataAugmentationDINO(object):
             lt[unique_vals] = torch.arange(len(unique_vals))
             resized_masks_int = lt[resized_masks_int]
 
+            # update nb_seg
+            nb_seg = len(np.unique(resized_masks_int))
             # First, create a mask for each segment
             masks = []
             for mask_idx in range(nb_seg):
-                masks.append(resized_masks_int == mask_idx)
+                matching_mask = resized_masks_int == mask_idx
+                if (
+                    torch.numel(matching_mask > 0) > self.patch_size * self.patch_size
+                ):  # possible that some masks are 0
+                    masks.append(resized_masks_int == mask_idx)
+
             masks = torch.stack(masks)
 
             # Then, find the bounding boxes for each segment
@@ -394,8 +409,8 @@ class DataAugmentationDINO(object):
                 # Output: C P NxP
                 tot_patches = 0
                 list_flat_patches = []
-                crop_id_list = []
-                for i, local_crop in enumerate(local_crops):
+                crop_len_list = []
+                for local_crop in local_crops:
                     if len(local_crop.shape) > 3:
                         local_crop = local_crop[0]
 
@@ -426,7 +441,7 @@ class DataAugmentationDINO(object):
                     curr_nb_patches = len(selected_patches)
                     tot_patches += curr_nb_patches
 
-                    crop_id_list.append(torch.ones(curr_nb_patches) * i)
+                    crop_len_list.append(curr_nb_patches)
                     """
                     # TODO: anticipate packing
                     if tot_patches > max_patches:
@@ -438,13 +453,12 @@ class DataAugmentationDINO(object):
 
                     list_flat_patches.append(selected_patches)
                 flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
-                crop_ids = torch.cat(crop_id_list)  # (n_crop n_p p)
-                return flat_patches, crop_ids
+                return flat_patches, crop_len_list
 
-            flat_patches, crop_ids = select_and_concat_nonzero_patches(fragments)
+            flat_patches, crop_len_list = select_and_concat_nonzero_patches(fragments)
             output["local_crops_vis"] = fragments  # for visualization
             output["local_crops"] = flat_patches
-            output["crop_ids"] = crop_ids
+            output["local_crop_len"] = crop_len_list
             output["pooled_seg"] = pooled_seg
             output["bboxes"] = bboxes
         else:
