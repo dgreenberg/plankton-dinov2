@@ -7,6 +7,7 @@ import logging
 
 import numpy as np
 import torch
+from einops import rearrange
 from kornia import augmentation
 from kornia.augmentation.container import AugmentationSequential
 from kornia.constants import Resample
@@ -23,6 +24,7 @@ from .transforms import (
 )
 
 logger = logging.getLogger("dinov2")
+MAX_PATCHES = 500
 
 
 class DataAugmentationDINO(object):
@@ -236,8 +238,8 @@ class DataAugmentationDINO(object):
             ):
                 single_image = self.random_crop(single_image).squeeze()
             else:
-                crop_y = int(self.global_crops_area / single_image.size(-1))
-                crop_x = int(self.global_crops_area / single_image.size(-2))
+                crop_y = self.global_crops_area // single_image.size(-1)
+                crop_x = self.global_crops_area // single_image.size(-2)
                 crop_y = self.round_up_patch_size(crop_y)
                 crop_x = self.round_up_patch_size(crop_x)
 
@@ -258,15 +260,17 @@ class DataAugmentationDINO(object):
 
     def make_seg_crops(self, image):
         # image : C H W
+        """
         orig_img_dims = image.shape
         resize_op = v2.Resize(
             orig_img_dims[1:],
             interpolation=InterpolationMode.NEAREST_EXACT,
             antialias=False,
         )
+        """
 
         segments_fz = felzenszwalb(
-            image.permute((1, 2, 0)), scale=300, sigma=0.5, min_size=1000
+            image.permute((1, 2, 0)), scale=300, sigma=0.5, min_size=1200
         )
         # TODO: experiment with SLIC seg
         segments_slic = slic(
@@ -371,7 +375,27 @@ class DataAugmentationDINO(object):
         im2_base = self.geometric_augmentation_global(image_global)
         global_crop_2 = self.global_transfo2(im2_base)
 
-        output["global_crops"] = torch.cat([global_crop_1, global_crop_2], dim=0)
+        def crop_to_patches(crop):
+            # B is usually 1 here ?
+            b, c, h, w = crop.size()
+
+            patches = crop.unfold(-1, self.patch_size, self.patch_size).unfold(
+                -3, self.patch_size, self.patch_size
+            )
+            patches = rearrange(
+                patches,
+                "b c n1 n2 p1 p2 -> b c (n1 n2 p2) p1",
+                b=b,
+                c=c,
+                p1=self.patch_size,
+                p2=self.patch_size,
+            )
+            return patches
+
+        output["global_crops"] = torch.cat(
+            [crop_to_patches(global_crop_1), crop_to_patches(global_crop_2)], dim=0
+        )
+        # print('output["global_crops"]', output["global_crops"].shape)
 
         # global crops for teacher:
         # output["global_crops_teacher"] = [global_crop_1, global_crop_2]
@@ -442,17 +466,18 @@ class DataAugmentationDINO(object):
                     tot_patches += curr_nb_patches
 
                     crop_len_list.append(curr_nb_patches)
-                    """
-                    # TODO: anticipate packing
-                    if tot_patches > max_patches:
+
+                    if tot_patches > MAX_PATCHES:
                         break
-                    """
+
                     selected_patches = torch.concat(
                         selected_patches, dim=1
                     )  # c (n_p p) p
 
                     list_flat_patches.append(selected_patches)
+                # list_flat_patches n_crop (c (n_p p) p)
                 flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
+                # print("crop_len_list", crop_len_list, np.sum(crop_len_list))
                 return flat_patches, crop_len_list
 
             flat_patches, crop_len_list = select_and_concat_nonzero_patches(fragments)

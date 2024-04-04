@@ -52,7 +52,6 @@ def named_apply(
 class BlockChunk(nn.ModuleList):
     def forward(self, x, attn_mask=None):
         for b in self:
-            print(b)
             x = b(x, attn_mask)
         return x
 
@@ -244,7 +243,7 @@ class DinoVisionTransformer(nn.Module):
 
     def prepare_tokens_with_masks(self, x, masks=None):
         # b c w h OR b c p (n p)
-        B, nc, w, h = x.shape
+        w, h = x.size(-2), x.size(-1)
         x = self.patch_embed(x)  # b n d (=384)
         if masks is not None:
             x = torch.where(

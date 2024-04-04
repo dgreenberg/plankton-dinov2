@@ -26,13 +26,13 @@ def collate_data_and_cast(
     # nb crops goes with batch size ie: b nc -> (b nc)
     if isinstance(samples, dict):
         B, nc, c, h, w = samples["global_crops"].size()
-        collated_global_crops = rearrange(
+        coll_global_crops = rearrange(
             samples["global_crops"],
             "b nc c h w -> (b nc) c h w",
             c=c,
             b=B,
         )
-        collated_local_crops = rearrange(
+        coll_local_crops = rearrange(
             samples["local_crops"],
             "b nc c h w -> (b nc) c h w",
             c=c,
@@ -43,7 +43,7 @@ def collate_data_and_cast(
     elif isinstance(samples[0], dict):  # on gpu and with free_shapes
         nc, c, h, w = samples[0]["global_crops"].size()
 
-        collated_global_crops = [
+        coll_global_crops = [
             rearrange(
                 el["global_crops"],
                 "nc c (p1 h1) (p2 w1) -> (h1 w1 p1) nc c p2",
@@ -56,42 +56,64 @@ def collate_data_and_cast(
         """
         gc_len_list = [
             el.shape[0] // patch_size + 1  # + 1 for cls token
-            for el in collated_global_crops
+            for el in coll_global_crops
             for _ in range(el.shape[1])
         ]  # len=B*nc
         """
-        collated_global_crops = pad_sequence(collated_global_crops, batch_first=True)
-        # gc_padded_len = collated_global_crops.shape[1] // patch_size + 1
-        collated_global_crops = rearrange(
-            collated_global_crops, "b np nc c p -> (b nc) c p np", p=patch_size
+        coll_global_crops = pad_sequence(coll_global_crops, batch_first=True)
+        # gc_padded_len = coll_global_crops.shape[1] // patch_size + 1
+        coll_global_crops = rearrange(
+            coll_global_crops, "b np nc c p -> (b nc) c p np", p=patch_size
         )
         # LOCAL CROPS
-        collated_local_crops = map(
+        coll_local_crops = map(
             lambda t: rearrange(t["local_crops"], "c np p -> np c p", p=patch_size),
             samples,
         )  # np = (np nc), have to put the unequal dim (np) first for pad_sequence()
-        collated_local_crops = pad_sequence(collated_local_crops, batch_first=True)
-        # lc_padded_len = collated_local_crops.shape[1] // patch_size + 1
+        coll_local_crops = pad_sequence(coll_local_crops, batch_first=True)
+        # lc_padded_len = coll_local_crops.shape[1] // patch_size + 1
         # lc_len_list = [
         #    [el // patch_size + 1 for el in el["local_crop_len"]] for el in samples
         # ]
-        collated_local_crops = rearrange(
-            collated_local_crops, "b np c p -> b c p np", p=patch_size
+        coll_local_crops = rearrange(
+            coll_local_crops, "b np c p -> b c p np", p=patch_size
         )
-        B = collated_global_crops.size(0)
+        B = coll_global_crops.size(0)
 
     else:  # on cpu
         n_global_crops = len(samples[0][0]["global_crops"])
         n_local_crops = len(samples[0][0]["local_crops"])
 
-        collated_global_crops = torch.stack(
-            [s[0]["global_crops"][i] for i in range(n_global_crops) for s in samples]
-        ).to(dtype)
-        collated_local_crops = torch.stack(
-            [s[0]["local_crops"][i] for i in range(n_local_crops) for s in samples]
-        ).to(dtype)
+        coll_global_crops = [
+            s[0]["global_crops"][i] for i in range(n_global_crops) for s in samples
+        ]
+        coll_local_crops = [
+            s[0]["local_crops"][i] for i in range(n_local_crops) for s in samples
+        ]
 
-        B = len(collated_global_crops)
+        if free_shapes:
+            c = coll_global_crops[0].size(0)
+            coll_global_crops = [
+                rearrange(el, "c n p -> n (c p)", p=patch_size, c=c)
+                for el in coll_global_crops
+            ]
+            coll_global_crops = pad_sequence(coll_global_crops, batch_first=True)
+            coll_global_crops = rearrange(
+                coll_global_crops, "b n (c p) -> b c p n", p=patch_size, c=c
+            )
+            # [48, 4032, 14] = (b c) n p
+            coll_local_crops = pad_sequence(coll_local_crops, batch_first=True)
+            coll_local_crops = rearrange(
+                coll_local_crops, "(b c) n p -> b c p n", p=patch_size, c=c
+            )
+            if random.random() > 0.9:
+                print("coll_global_crops", coll_global_crops.shape)
+                print("coll_local_crops", coll_local_crops.shape)
+        else:
+            coll_global_crops = torch.stack(coll_global_crops)
+            coll_local_crops = torch.stack(coll_local_crops)
+
+        B = len(coll_global_crops)
     N = n_tokens
     n_samples_masked = int(B * mask_probability)
     probs = torch.linspace(*mask_ratio_tuple, n_samples_masked + 1)
@@ -102,8 +124,8 @@ def collate_data_and_cast(
         prob_max = probs[i + 1]
         if free_shapes:
             mask_generator.set_shape(
-                collated_global_crops[i].shape[1] // patch_size,
-                collated_global_crops[i].shape[2] // patch_size,
+                coll_global_crops[i].shape[1] // patch_size,
+                coll_global_crops[i].shape[2] // patch_size,
             )
         masks_list.append(
             torch.BoolTensor(
@@ -155,8 +177,8 @@ def collate_data_and_cast(
         attn_mask_lc = attn_mask_gc = None
     """
     return {
-        "collated_global_crops": collated_global_crops.to(dtype),
-        "collated_local_crops": collated_local_crops.to(dtype),
+        "collated_global_crops": coll_global_crops.to(dtype),
+        "collated_local_crops": coll_local_crops.to(dtype),
         "collated_masks": collated_masks,
         "mask_indices_list": mask_indices_list,
         "masks_weight": masks_weight,

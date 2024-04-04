@@ -12,6 +12,7 @@ import sys
 from enum import Enum
 from functools import partial
 
+import numpy as np
 import torch
 import torchvision
 import wandb
@@ -32,7 +33,7 @@ from dinov2.logging import MetricLogger
 from dinov2.models.vision_transformer import count_parameters
 from dinov2.train.ssl_meta_arch import SSLMetaArch
 from dinov2.utils.config import setup
-from dinov2.utils.utils import CosineScheduler
+from dinov2.utils.utils import CosineScheduler, exists
 
 torch.backends.cuda.matmul.allow_tf32 = (
     True  # PyTorch 1.12 sets this to False by default
@@ -133,6 +134,35 @@ def build_schedulers(cfg):
         teacher_temp_schedule,
         last_layer_lr_schedule,
     )
+
+
+def select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype):
+    if cfg.train.augmentations in [
+        AugmentationType.KORNIA_CPU.value,
+        AugmentationType.TORCHV_CPU.value,
+    ]:
+        collate_fn_cpu = partial(
+            collate_data_and_cast,
+            mask_ratio_tuple=cfg.ibot.mask_ratio_min_max,
+            mask_probability=cfg.ibot.mask_sample_probability,
+            n_tokens=n_tokens,
+            mask_generator=mask_generator,
+            dtype=inputs_dtype,
+            free_shapes=cfg.crops.free_shapes,
+        )
+        collate_fn_gpu = None
+    else:
+        collate_fn_cpu = None
+        collate_fn_gpu = partial(
+            collate_data_and_cast,
+            mask_ratio_tuple=cfg.ibot.mask_ratio_min_max,
+            mask_probability=cfg.ibot.mask_sample_probability,
+            n_tokens=n_tokens,
+            mask_generator=mask_generator,
+            dtype=inputs_dtype,
+            free_shapes=cfg.crops.free_shapes,
+        )
+    return collate_fn_cpu, collate_fn_gpu
 
 
 def select_augmentations(cfg):
@@ -253,15 +283,8 @@ def do_train(cfg, model, resume=False):
     )
 
     data_transform_cpu, data_transform_gpu = select_augmentations(cfg)
-
-    collate_fn = partial(
-        collate_data_and_cast,
-        mask_ratio_tuple=cfg.ibot.mask_ratio_min_max,
-        mask_probability=cfg.ibot.mask_sample_probability,
-        n_tokens=n_tokens,
-        mask_generator=mask_generator,
-        dtype=inputs_dtype,
-        free_shapes=cfg.crops.free_shapes,
+    collate_fn_cpu, collate_fn_gpu = select_collate_fn(
+        cfg, n_tokens, mask_generator, inputs_dtype
     )
 
     # setup data loader
@@ -285,19 +308,7 @@ def do_train(cfg, model, resume=False):
         "sampler_advance": 0,  # TODO(qas): fix this -- start_iter * cfg.train.batch_size_per_gpu,
         "drop_last": True,
     }
-    if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
-        data_loader = make_data_loader(collate_fn=collate_fn, **dl_kwargs)
-    elif cfg.crops.free_shapes or cfg.crops.use_native_res:
-
-        def list_collate(batch):
-            data = [item[0] for item in batch]
-            target = [item[1] for item in batch]
-            target = torch.LongTensor(target)
-            return [data, target]
-
-        data_loader = make_data_loader(collate_fn=list_collate, **dl_kwargs)
-    else:
-        data_loader = make_data_loader(collate_fn=None, **dl_kwargs)
+    data_loader = make_data_loader(collate_fn=collate_fn_cpu, **dl_kwargs)
 
     # training loop
 
@@ -339,11 +350,11 @@ def do_train(cfg, model, resume=False):
             # current_device_nb = model.student.backbone.device
             if isinstance(data, list):
                 data = data[0]
-            if data_transform_gpu is not None:
+            if exists(data_transform_gpu):
                 data = data_transform_gpu(data)
-            data = collate_fn(
-                data
-            )  # collate_fn collates crops and computes masks tensors
+            if exists(data_transform_gpu):
+                # collate_fn collates crops and computes masks tensors
+                data = collate_fn_gpu(data)
 
             data = {
                 k: (
