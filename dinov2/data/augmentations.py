@@ -456,11 +456,11 @@ class DataAugmentationDINO(object):
                 return flat_patches, crop_len_list
 
             flat_patches, crop_len_list = select_and_concat_nonzero_patches(fragments)
-            output["local_crops_vis"] = fragments  # for visualization
+            # output["local_crops_vis"] = fragments  # for visualization
             output["local_crops"] = flat_patches
             output["local_crop_len"] = crop_len_list
-            output["pooled_seg"] = pooled_seg
-            output["bboxes"] = bboxes
+            # output["pooled_seg"] = pooled_seg
+            # output["bboxes"] = bboxes
         else:
             local_crops = [
                 self.local_transfo(self.geometric_augmentation_local(image))

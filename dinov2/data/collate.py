@@ -53,14 +53,15 @@ def collate_data_and_cast(
             )
             for el in samples
         ]
+        """
         gc_len_list = [
             el.shape[0] // patch_size + 1  # + 1 for cls token
             for el in collated_global_crops
             for _ in range(el.shape[1])
         ]  # len=B*nc
-
+        """
         collated_global_crops = pad_sequence(collated_global_crops, batch_first=True)
-        gc_padded_len = collated_global_crops.shape[1] // patch_size + 1
+        # gc_padded_len = collated_global_crops.shape[1] // patch_size + 1
         collated_global_crops = rearrange(
             collated_global_crops, "b np nc c p -> (b nc) c p np", p=patch_size
         )
@@ -70,10 +71,10 @@ def collate_data_and_cast(
             samples,
         )  # np = (np nc), have to put the unequal dim (np) first for pad_sequence()
         collated_local_crops = pad_sequence(collated_local_crops, batch_first=True)
-        lc_padded_len = collated_local_crops.shape[1] // patch_size + 1
-        lc_len_list = [
-            [el // patch_size + 1 for el in el["local_crop_len"]] for el in samples
-        ]
+        # lc_padded_len = collated_local_crops.shape[1] // patch_size + 1
+        # lc_len_list = [
+        #    [el // patch_size + 1 for el in el["local_crop_len"]] for el in samples
+        # ]
         collated_local_crops = rearrange(
             collated_local_crops, "b np c p -> b c p np", p=patch_size
         )

@@ -52,6 +52,7 @@ def named_apply(
 class BlockChunk(nn.ModuleList):
     def forward(self, x, attn_mask=None):
         for b in self:
+            print(b)
             x = b(x, attn_mask)
         return x
 
