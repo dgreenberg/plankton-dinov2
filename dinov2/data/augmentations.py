@@ -90,6 +90,15 @@ class DataAugmentationDINO(object):
                     data_keys=["input", "input"],
                 )
 
+                self.std_augmentation_local = AugmentationSequential(
+                    augmentation.RandomResizedCrop(
+                        local_crops_size,
+                        scale=local_crops_scale,
+                        resample=Resample.BICUBIC.name,
+                        same_on_batch=False,
+                    ),
+                    augmentation.RandomHorizontalFlip(p=0.5, p_batch=1.0),
+                )
             else:
                 self.geometric_augmentation_global = AugmentationSequential(
                     augmentation.RandomResizedCrop(
@@ -427,18 +436,38 @@ class DataAugmentationDINO(object):
                 fragment[:, mask] = crop[:, mask]
                 fragments.append(fragment)
 
-            def select_and_concat_nonzero_patches(local_crops):
+            def select_and_concat_nonzero_patches(local_crops, image):
                 # Select non-zero 14x14 patches from local_crops and flat concat
                 # Input: list N x [C H W]
                 # Output: C P NxP
+                exit_loop = False
                 tot_patches = 0
                 list_flat_patches = []
                 crop_len_list = []
                 for local_crop in local_crops:
                     if len(local_crop.shape) > 3:
                         local_crop = local_crop[0]
-
                     C, H, W = local_crop.shape
+                    tot_patches = (H // self.patch_size) * (W // self.patch_size)
+                    if tot_patches > MAX_PATCHES:
+                        if (
+                            len(crop_len_list) <= 1
+                        ):  # if seg fails, revert to std patching
+                            patches = [
+                                self.local_transfo(
+                                    self.std_augmentation_local(image)
+                                ).squeeze()
+                                for _ in range(8)  # 8 is std local crops nb
+                            ]
+                            patches = torch.cat(
+                                patches, dim=1
+                            )  # c (n_c lc_size) lc_size
+
+                            exit_loop = True
+                        else:
+                            # otherwise, we collected enought patches and exit the loop
+                            break
+                        # PROBLEM, sometimes seg fails and one crop has more than max patches
 
                     patches = local_crop.unfold(
                         1, self.patch_size, self.patch_size
@@ -467,20 +496,20 @@ class DataAugmentationDINO(object):
 
                     crop_len_list.append(curr_nb_patches)
 
-                    if tot_patches > MAX_PATCHES:
-                        break
-
-                    selected_patches = torch.concat(
-                        selected_patches, dim=1
-                    )  # c (n_p p) p
+                    selected_patches = torch.cat(selected_patches, dim=1)  # c (n_p p) p
 
                     list_flat_patches.append(selected_patches)
+
+                    if exit_loop:
+                        break
                 # list_flat_patches n_crop (c (n_p p) p)
                 flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
                 # print("crop_len_list", crop_len_list, np.sum(crop_len_list))
                 return flat_patches, crop_len_list
 
-            flat_patches, crop_len_list = select_and_concat_nonzero_patches(fragments)
+            flat_patches, crop_len_list = select_and_concat_nonzero_patches(
+                fragments, image=image
+            )
             # output["local_crops_vis"] = fragments  # for visualization
             output["local_crops"] = flat_patches
             output["local_crop_len"] = crop_len_list
@@ -491,8 +520,6 @@ class DataAugmentationDINO(object):
                 self.local_transfo(self.geometric_augmentation_local(image))
                 for _ in range(self.local_crops_number)
             ]
-            output["local_crops"] = torch.cat(
-                [self.local_transfo(local_crop) for local_crop in local_crops], dim=0
-            )
+            output["local_crops"] = torch.cat(local_crops, dim=0)
         output["offsets"] = ()
         return output

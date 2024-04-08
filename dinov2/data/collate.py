@@ -106,9 +106,9 @@ def collate_data_and_cast(
             coll_local_crops = rearrange(
                 coll_local_crops, "(b c) n p -> b c p n", p=patch_size, c=c
             )
-            if random.random() > 0.9:
-                print("coll_global_crops", coll_global_crops.shape)
-                print("coll_local_crops", coll_local_crops.shape)
+            # if random.random() > 0.9:
+            #    print("coll_global_crops", coll_global_crops.shape)
+            #    print("coll_local_crops", coll_local_crops.shape)
         else:
             coll_global_crops = torch.stack(coll_global_crops)
             coll_local_crops = torch.stack(coll_local_crops)
