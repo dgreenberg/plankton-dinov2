@@ -4,6 +4,7 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import logging
+from enum import Enum
 
 import numpy as np
 import torch
@@ -27,6 +28,11 @@ logger = logging.getLogger("dinov2")
 MAX_PATCHES = 400
 
 
+class SegmentationAlgo(Enum):
+    FELZENSWALB = "felzenswalb"
+    SLIC = "slic"
+
+
 class DataAugmentationDINO(object):
     def __init__(
         self,
@@ -38,7 +44,7 @@ class DataAugmentationDINO(object):
         use_kornia=False,
         use_native_res=False,
         patch_size=14,
-        do_seg_crops=False,
+        do_seg_crops=None,
     ):
         self.global_crops_scale = global_crops_scale
         self.local_crops_scale = local_crops_scale
@@ -281,7 +287,7 @@ class DataAugmentationDINO(object):
 
         return torch.stack(img_global_list)
 
-    def make_seg_crops(self, image):
+    def make_seg_crops(self, image, seg_algo):
         # image : C H W
         """
         orig_img_dims = image.shape
@@ -291,18 +297,24 @@ class DataAugmentationDINO(object):
             antialias=False,
         )
         """
-
-        segments_fz = felzenszwalb(
-            image.permute((1, 2, 0)), scale=300, sigma=0.5, min_size=1200
-        )
-        # TODO: experiment with SLIC seg
-        segments_slic = slic(
-            image.permute((1, 2, 0)),
-            n_segments=5,
-            compactness=10,
-            sigma=1.0,
-            start_label=1,
-        )
+        c, h, w = image.shape
+        if seg_algo == SegmentationAlgo.FELZENSWALB:
+            segments = felzenszwalb(
+                image.permute((1, 2, 0)), scale=300, sigma=0.5, min_size=1000
+            )
+        elif seg_algo == SegmentationAlgo.SLIC:
+            n_segments = max(int((h * w) / (98 * 98)), 3)
+            segments = slic(
+                image.permute((1, 2, 0)),
+                n_segments=n_segments,
+                compactness=10,
+                sigma=1.0,
+                start_label=1,
+            )
+        else:
+            raise NotImplementedError(
+                f"Specified segmentation algorithm {seg_algo} not implemented"
+            )
 
         def seg_to_patched_seg(segments, image_gray):
             segments = segments / (segments.max() + 1e-5)
@@ -340,7 +352,7 @@ class DataAugmentationDINO(object):
             masks = torch.stack(masks)
 
             # Then, find the bounding boxes for each segment
-            bboxes = masks_to_boxes(masks)
+            bboxes = masks_to_boxes(masks)  # (x1, y1, x2, y2)
 
             bounded_images, bounded_masks = [], []
             for mask_idx in range(nb_seg):
@@ -361,7 +373,7 @@ class DataAugmentationDINO(object):
 
             return bounded_images, bounded_masks, resized_masks_int, bboxes
 
-        return seg_to_patched_seg(segments_fz, image[0, :, :])
+        return seg_to_patched_seg(segments, image[0, :, :])
 
     def pad_to_patch_mutiple(self, image):
         # Can also make a version that pads down
@@ -425,7 +437,9 @@ class DataAugmentationDINO(object):
 
         # local crops:
         if self.do_seg_crops:
-            local_crops, masks, pooled_seg, bboxes = self.make_seg_crops(image)
+            local_crops, masks, pooled_seg, bboxes = self.make_seg_crops(
+                image, seg_algo=self.do_seg_crops
+            )
             # masks = [mask[None, :, :].repeat((3, 1, 1)) for mask in masks]
 
             local_crops, masks = list(
@@ -537,7 +551,10 @@ class DataAugmentationDINO(object):
             output["local_crops"] = flat_patches
             output["local_crop_len"] = crop_len_list
             # output["pooled_seg"] = pooled_seg
-            # output["bboxes"] = bboxes
+            crop_dims = torch.cat(
+                [bboxes[:, 1:2] - bboxes[:, :0], bboxes[:, 2:3] - bboxes[:, 0:1]], dim=1
+            )  # N (W H)
+            output["local_crop_dims"] = crop_dims
         else:
             local_crops = [
                 self.local_transfo(self.geometric_augmentation_local(image))

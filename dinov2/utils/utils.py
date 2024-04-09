@@ -84,7 +84,7 @@ def match_pos_embeds(
         )
         print(
             "pos_embed_ref: ",
-            pos_embeds_ref.shape,
+            pos_embeds_ref.shape,  #  torch.Size([1, 257, 768])
             " pos_embed_loaded: ",
             pos_embeds_loaded.shape,
         )

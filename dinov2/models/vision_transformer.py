@@ -202,6 +202,7 @@ class DinoVisionTransformer(nn.Module):
 
     def init_weights(self):
         trunc_normal_(self.pos_embed, std=0.02)
+        self.ref_pos_embed = self.pos_embed.clone()
         nn.init.normal_(self.cls_token, std=1e-6)
         if self.register_tokens is not None:
             nn.init.normal_(self.register_tokens, std=1e-6)
@@ -219,30 +220,68 @@ class DinoVisionTransformer(nn.Module):
         dim = x.shape[-1]
         w0 = w // self.patch_size
         h0 = h // self.patch_size
-        # we add a small number to avoid floating point error in the interpolation
-        # see discussion at https://github.com/facebookresearch/dino/issues/8
-        w0, h0 = w0 + self.interpolate_offset, h0 + self.interpolate_offset
+        M = int(math.sqrt(N))  # Recover the number of patches in each dimension
+        assert N == M * M
+        kwargs = {}
+        if self.interpolate_offset:
+            # Historical kludge: add a small number to avoid floating point error in the interpolation, see https://github.com/facebookresearch/dino/issues/8
+            # Note: still needed for backward-compatibility, the underlying operators are using both output size and scale factors
+            sx = float(w0 + self.interpolate_offset) / M
+            sy = float(h0 + self.interpolate_offset) / M
+            kwargs["scale_factor"] = (sx, sy)
+        else:
+            # Simply specify an output size instead of a scale factor
+            kwargs["size"] = (w0, h0)
 
-        sqrt_N = math.sqrt(N)
-        sx, sy = float(w0) / sqrt_N, float(h0) / sqrt_N
         patch_pos_embed = nn.functional.interpolate(
-            patch_pos_embed.reshape(1, int(sqrt_N), int(sqrt_N), dim).permute(
-                0, 3, 1, 2
-            ),
-            scale_factor=(sx, sy),
+            patch_pos_embed.reshape(1, M, M, dim).permute(0, 3, 1, 2),
             mode="bicubic",
             antialias=self.interpolate_antialias,
+            **kwargs,
         )
 
-        assert int(w0) == patch_pos_embed.shape[-2]
-        assert int(h0) == patch_pos_embed.shape[-1]
+        assert (w0, h0) == patch_pos_embed.shape[-2:]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1).to(
             previous_dtype
         )
 
-    def prepare_tokens_with_masks(self, x, masks=None):
-        # TODO: interpolate pos embed according to crop bboxes sizes
+    def interpolate_pos_encoding_lc_navit(self, x, crop_dims, crop_nb_list):
+        previous_dtype = x.dtype
+        N_ref = self.ref_pos_embed.shape[1] - 1
+        ref_dim = self.ref_pos_embed.shape[-1]
+        x_dim = x.shape[-1]
+
+        M = int(math.sqrt(N_ref))  # Recover the number of patches in each dimension
+        assert N_ref == M * M
+        print("x", x.shape, "ref", self.ref_pos_embed)
+
+        ref_pos_embed = self.ref_pos_embed.float()
+        class_pos_embed = ref_pos_embed[:, 0]
+        ref_patch_pos_embed = ref_pos_embed[:, 1:]
+        crop_pos_embed_list = []
+        for crop_dim, crop_nbs in zip(crop_dims, crop_nb_list):
+            w, h = crop_dim
+            w0 = w // self.patch_size
+            h0 = h // self.patch_size
+
+            crop_pos_embed = nn.functional.interpolate(
+                ref_patch_pos_embed.reshape(1, w, h, ref_dim).permute(0, 3, 1, 2),
+                mode="bicubic",
+                antialias=self.interpolate_antialias,
+                size=(x_dim, w0, h0),
+            )
+            assert (w0, h0) == crop_pos_embed.shape[-2:]
+            crop_pos_embed = crop_pos_embed.permute(0, 2, 3, 1).view(1, -1, x_dim)
+            # TODO: get kept patch nbs list as param and keep only these, use crop_nb_list
+            crop_pos_embed_list.append(crop_pos_embed)
+
+        return torch.cat(
+            ([class_pos_embed.unsqueeze(0)] + crop_pos_embed_list), dim=1
+        ).to(previous_dtype)
+
+    def prepare_tokens_with_masks(self, x, masks=None, free_shapes=False):
+        # TODO: pass free_shapes, crop_dims, crop_nb_list
         # newly created pos embed vect also needs padding
         # b c w h OR b c p (n p)
         w, h = x.size(-2), x.size(-1)
@@ -253,7 +292,13 @@ class DinoVisionTransformer(nn.Module):
             )
 
         x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
-        interpolated_pos_embeds = self.interpolate_pos_encoding(x, w, h)
+        if free_shapes:
+            interpolated_pos_embeds = self.interpolate_pos_encoding_lc_navit(
+                x, crop_dims=None, crop_nb_list=None
+            )
+        else:
+            interpolated_pos_embeds = self.interpolate_pos_encoding(x, w, h)
+
         x = x + interpolated_pos_embeds
 
         if self.register_tokens is not None:
