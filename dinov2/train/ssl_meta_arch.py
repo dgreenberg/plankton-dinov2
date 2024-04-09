@@ -371,6 +371,18 @@ class SSLMetaArch(nn.Module):
             buffer_tensor_patch_tokens = ibot_student_patch_tokens.new_zeros(
                 upperbound, _dim
             )
+            # print(
+            #    ibot_student_patch_tokens.flatten(0, 1).shape,
+            #    buffer_tensor_patch_tokens.shape,
+            #    mask_indices_list.shape,
+            #    torch.index_select(
+            #        ibot_student_patch_tokens.flatten(0, 1),
+            #        dim=0,
+            #        index=mask_indices_list,
+            #    ).shape,
+            #    upperbound,
+            #    n_masked_patches,
+            # )
             buffer_tensor_patch_tokens[:n_masked_patches].copy_(
                 torch.index_select(
                     ibot_student_patch_tokens.flatten(0, 1),

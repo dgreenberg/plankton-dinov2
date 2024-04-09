@@ -123,20 +123,32 @@ def collate_data_and_cast(
         prob_min = probs[i]
         prob_max = probs[i + 1]
         if free_shapes:
-            mask_generator.set_shape(
-                coll_global_crops[i].shape[1] // patch_size,
-                coll_global_crops[i].shape[2] // patch_size,
-            )
-        masks_list.append(
-            torch.BoolTensor(
+            mask_tensor = torch.rand(
+                1,
+                coll_global_crops[i].shape[-1] // patch_size,
+            ) < random.uniform(prob_min, prob_max)
+        else:
+            mask_tensor = torch.BoolTensor(
                 mask_generator(int(N * random.uniform(prob_min, prob_max)))
             )
-        )
+        masks_list.append(mask_tensor)
         upperbound += int(N * prob_max)
     for i in range(n_samples_masked, B):
-        masks_list.append(torch.BoolTensor(mask_generator(0)))
+        if free_shapes:
+            masks_list.append(
+                torch.BoolTensor(
+                    torch.zeros(
+                        1, coll_global_crops[i].shape[-1] // patch_size, dtype=bool
+                    )
+                )
+            )
+        else:
+            masks_list.append(torch.BoolTensor(mask_generator(0)))
 
-    random.shuffle(masks_list)  # not possible if global crops of diff sizes
+    if not free_shapes:
+        random.shuffle(
+            masks_list
+        )  # not possible if global crops of diff sizes in batch
 
     collated_masks = torch.stack(masks_list).flatten(1)
     mask_indices_list = collated_masks.flatten().nonzero().flatten()
@@ -146,6 +158,8 @@ def collate_data_and_cast(
         .unsqueeze(-1)
         .expand_as(collated_masks)[collated_masks]
     )
+    if mask_indices_list.shape[0] > upperbound:
+        upperbound = mask_indices_list.shape[0]
 
     """
     if free_shapes:  # masking attention to prohibit cross-attending across patches

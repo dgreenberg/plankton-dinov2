@@ -247,22 +247,36 @@ class DataAugmentationDINO(object):
             ):
                 single_image = self.random_crop(single_image).squeeze()
             else:
-                crop_y = self.global_crops_area // single_image.size(-1)
-                crop_x = self.global_crops_area // single_image.size(-2)
+                H, W = single_image.size(-2), single_image.size(-1)
+                min_dim_idx = np.argmin((H, W))
+                crop_0 = (H, W)[min_dim_idx]
+                crop_1 = self.global_crops_area // crop_0
+
+                if min_dim_idx == 0:
+                    crop_y = crop_0
+                    crop_x = crop_1
+                else:
+                    crop_y = crop_1
+                    crop_x = crop_0
                 crop_y = self.round_up_patch_size(crop_y)
                 crop_x = self.round_up_patch_size(crop_x)
 
-                if (
-                    single_image.size(-2) - crop_x > 0
-                    and single_image.size(-1) - crop_y > 0
-                ):
+                if single_image.size(-2) - crop_x < 0:
+                    crop_x = single_image.size(-2)
+                if single_image.size(-1) - crop_y < 0:
+                    crop_y = single_image.size(-1)
+
+                offset_x, offset_y = 0, 0
+                if single_image.size(-2) - crop_x:
                     offset_x = np.random.randint(single_image.size(-2) - crop_x)
+
+                if single_image.size(-1) - crop_y:
                     offset_y = np.random.randint(single_image.size(-1) - crop_y)
 
-                    single_image = single_image[
-                        offset_x : offset_x + crop_x,
-                        offset_y : offset_y + crop_y,
-                    ]
+                single_image = single_image[
+                    offset_x : offset_x + crop_x,
+                    offset_y : offset_y + crop_y,
+                ]
             img_global_list.append(single_image)
 
         return torch.stack(img_global_list)
@@ -448,8 +462,9 @@ class DataAugmentationDINO(object):
                     if len(local_crop.shape) > 3:
                         local_crop = local_crop[0]
                     C, H, W = local_crop.shape
-                    tot_patches = (H // self.patch_size) * (W // self.patch_size)
-                    if tot_patches > MAX_PATCHES:
+                    tot_patches += (H // self.patch_size) * (W // self.patch_size)
+
+                    if tot_patches >= MAX_PATCHES:
                         if (
                             len(crop_len_list) <= 1
                         ):  # if seg fails, revert to std patching
@@ -505,6 +520,10 @@ class DataAugmentationDINO(object):
                 # list_flat_patches n_crop (c (n_p p) p)
                 flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
                 # print("crop_len_list", crop_len_list, np.sum(crop_len_list))
+                if flat_patches.size(1) > 6000:
+                    print(
+                        "flat_patches", flat_patches.shape, "#", len(list_flat_patches)
+                    )
                 return flat_patches, crop_len_list
 
             flat_patches, crop_len_list = select_and_concat_nonzero_patches(
