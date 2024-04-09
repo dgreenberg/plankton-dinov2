@@ -242,6 +242,8 @@ class DinoVisionTransformer(nn.Module):
         )
 
     def prepare_tokens_with_masks(self, x, masks=None):
+        # TODO: interpolate pos embed according to crop bboxes sizes
+        # newly created pos embed vect also needs padding
         # b c w h OR b c p (n p)
         w, h = x.size(-2), x.size(-1)
         x = self.patch_embed(x)  # b n d (=384)

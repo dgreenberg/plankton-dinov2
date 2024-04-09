@@ -24,7 +24,7 @@ from .transforms import (
 )
 
 logger = logging.getLogger("dinov2")
-MAX_PATCHES = 500
+MAX_PATCHES = 400
 
 
 class DataAugmentationDINO(object):
@@ -522,7 +522,11 @@ class DataAugmentationDINO(object):
                 # print("crop_len_list", crop_len_list, np.sum(crop_len_list))
                 if flat_patches.size(1) > 6000:
                     print(
-                        "flat_patches", flat_patches.shape, "#", len(list_flat_patches)
+                        "WARNING: flat_patches too big",
+                        flat_patches.shape,
+                        "#",
+                        len(list_flat_patches),
+                        len(crop_len_list),
                     )
                 return flat_patches, crop_len_list
 

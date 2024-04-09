@@ -113,7 +113,7 @@ def match_state_dict_keys(state_dict, keys_load, keys_model):
             ): v
             for k, v in state_dict.items()
         }
-    else:  # inverse, replace single in loada by double ptn
+    else:  # inverse, replace single in load by double pttn
         for k1 in keys_model:
             match = re.search(double_nb_ptn, k1)
             if match:
