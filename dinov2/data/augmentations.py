@@ -25,7 +25,7 @@ from .transforms import (
 )
 
 logger = logging.getLogger("dinov2")
-MAX_PATCHES = 400
+MAX_PATCHES = 1000
 
 
 class SegmentationAlgo(Enum):
@@ -298,11 +298,11 @@ class DataAugmentationDINO(object):
         )
         """
         c, h, w = image.shape
-        if seg_algo == SegmentationAlgo.FELZENSWALB:
+        if seg_algo == SegmentationAlgo.FELZENSWALB.value:
             segments = felzenszwalb(
                 image.permute((1, 2, 0)), scale=300, sigma=0.5, min_size=1000
             )
-        elif seg_algo == SegmentationAlgo.SLIC:
+        elif seg_algo == SegmentationAlgo.SLIC.value:
             n_segments = max(int((h * w) / (98 * 98)), 3)
             segments = slic(
                 image.permute((1, 2, 0)),
@@ -427,9 +427,11 @@ class DataAugmentationDINO(object):
             )
             return patches
 
-        output["global_crops"] = torch.cat(
+        global_crops = torch.cat(
             [crop_to_patches(global_crop_1), crop_to_patches(global_crop_2)], dim=0
-        )
+        )  # 2 b c (n p) p
+        nb_gc_patches = (global_crops.shape[2] / self.patch_size) * 2
+        output["global_crops"] = global_crops
         # print('output["global_crops"]', output["global_crops"].shape)
 
         # global crops for teacher:
@@ -464,7 +466,7 @@ class DataAugmentationDINO(object):
                 fragment[:, mask] = crop[:, mask]
                 fragments.append(fragment)
 
-            def select_and_concat_nonzero_patches(local_crops, image):
+            def select_and_concat_nonzero_patches(local_crops, image, nb_gc_patches=0):
                 # Select non-zero 14x14 patches from local_crops and flat concat
                 # Input: list N x [C H W]
                 # Output: C P NxP
@@ -478,18 +480,18 @@ class DataAugmentationDINO(object):
                     C, H, W = local_crop.shape
                     tot_patches += (H // self.patch_size) * (W // self.patch_size)
 
-                    if tot_patches >= MAX_PATCHES:
+                    if (tot_patches + nb_gc_patches) >= MAX_PATCHES:
                         if (
                             len(crop_len_list) <= 1
                         ):  # if seg fails, revert to std patching
-                            patches = [
+                            local_crop = [
                                 self.local_transfo(
                                     self.std_augmentation_local(image)
                                 ).squeeze()
                                 for _ in range(8)  # 8 is std local crops nb
                             ]
-                            patches = torch.cat(
-                                patches, dim=1
+                            local_crop = torch.cat(
+                                local_crop, dim=1
                             )  # c (n_c lc_size) lc_size
 
                             exit_loop = True
@@ -534,18 +536,17 @@ class DataAugmentationDINO(object):
                 # list_flat_patches n_crop (c (n_p p) p)
                 flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
                 # print("crop_len_list", crop_len_list, np.sum(crop_len_list))
-                if flat_patches.size(1) > 6000:
+                if flat_patches.size(1) / 14 > 400:
                     print(
-                        "WARNING: flat_patches too big",
+                        "WARNING: flat_patches too big, over 400 tokens",
                         flat_patches.shape,
                         "#",
                         len(list_flat_patches),
-                        len(crop_len_list),
                     )
                 return flat_patches, crop_len_list
 
             flat_patches, crop_len_list = select_and_concat_nonzero_patches(
-                fragments, image=image
+                fragments, image=image, nb_gc_patches=nb_gc_patches
             )
             # output["local_crops_vis"] = fragments  # for visualization
             output["local_crops"] = flat_patches
