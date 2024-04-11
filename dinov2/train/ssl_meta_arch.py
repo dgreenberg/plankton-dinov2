@@ -176,10 +176,6 @@ class SSLMetaArch(nn.Module):
         if not images["collated_global_crops"].is_cuda:
             global_crops = images["collated_global_crops"].cuda(non_blocking=True)
             local_crops = images["collated_local_crops"].cuda(non_blocking=True)
-            # global_crops_teacher = images["collated_global_crops_teacher"].cuda(
-            #    non_blocking=True
-            # )
-
             masks = images["collated_masks"].cuda(non_blocking=True)
             mask_indices_list = images["mask_indices_list"].cuda(non_blocking=True)
             n_masked_patches_tensor = images["n_masked_patches"].cuda(non_blocking=True)
@@ -188,17 +184,22 @@ class SSLMetaArch(nn.Module):
                 attn_mask_gc = images["attn_mask_gc"].cuda(non_blocking=True)
             if exists(images["attn_mask_gc"]):
                 attn_mask_lc = images["attn_mask_lc"].cuda(non_blocking=True)
+
+            local_crop_len = images["local_crop_len"].cuda(non_blocking=True)
+            local_patch_pos = images["local_patch_pos"]
+            local_crop_dims = images["local_crop_dims"].cuda(non_blocking=True)
         else:
             global_crops = images["collated_global_crops"]
             local_crops = images["collated_local_crops"]
-            # global_crops_teacher = images["collated_global_crops_teacher"]
-
             masks = images["collated_masks"]
             mask_indices_list = images["mask_indices_list"]
             n_masked_patches_tensor = images["n_masked_patches"]
             masks_weight = images["masks_weight"]
             attn_mask_gc = images["attn_mask_gc"]
             attn_mask_lc = images["attn_mask_lc"]
+            local_crop_len = images["local_crop_len"]
+            local_patch_pos = images["local_patch_pos"]
+            local_crop_dims = images["local_crop_dims"]
 
         # print("ssl ", global_crops.shape, local_crops.shape)
         n_masked_patches = mask_indices_list.shape[0]
@@ -348,6 +349,9 @@ class SSLMetaArch(nn.Module):
             masks=[masks, None],
             is_training=True,
             attn_masks=[attn_mask_gc, attn_mask_lc],
+            local_crop_len=[None, local_crop_len],
+            local_patch_pos=[None, local_patch_pos],
+            local_crop_dims=[None, local_crop_dims],
         )  # only student global crops are masked
 
         inputs_for_student_head_list = []

@@ -242,7 +242,10 @@ def drop_add_residual_stochastic_depth_list(
 
 class NestedTensorBlock(Block):
     def forward_nested(
-        self, x_list: List[Tensor], attn_mask: List[Tensor] = None
+        self,
+        x_list: List[Tensor],
+        attn_mask: List[Tensor] = None,
+        local_crop_len: Tensor = None,
     ) -> List[Tensor]:
         """
         x_list contains a list of tensors to nest together and run
@@ -290,7 +293,7 @@ class NestedTensorBlock(Block):
             def ffn_residual_func(x: Tensor) -> Tensor:
                 return self.ls2(self.mlp(self.norm2(x)))
 
-            attn_bias, x = get_attn_bias_and_cat(x_list)
+            attn_bias, x = get_attn_bias_and_cat(x_list, seqlens=local_crop_len)
 
             if exists(attn_mask):
                 attn_mask = torch.cat(attn_mask, dim=0)
@@ -303,12 +306,12 @@ class NestedTensorBlock(Block):
             x = x + ffn_residual_func(x)
             return attn_bias.split(x)
 
-    def forward(self, x_or_x_list, attn_mask=None):
+    def forward(self, x_or_x_list, attn_mask=None, local_crop_len=None):
         if isinstance(x_or_x_list, Tensor):
             return super().forward(x_or_x_list, attn_mask)
         elif isinstance(x_or_x_list, list):
             if not XFORMERS_AVAILABLE:
                 raise AssertionError("xFormers is required for using nested tensors")
-            return self.forward_nested(x_or_x_list, attn_mask)
+            return self.forward_nested(x_or_x_list, attn_mask, local_crop_len)
         else:
             raise AssertionError

@@ -40,6 +40,10 @@ def collate_data_and_cast(
         )
         B = nc * B  # we define a new pseudo batch size
 
+        local_crop_len = samples["local_crop_len"]
+        local_patch_pos = samples["local_patch_pos"]
+        local_crop_dims = samples["local_crop_dims"]
+
     elif isinstance(samples[0], dict):  # on gpu and with free_shapes
         nc, c, h, w = samples[0]["global_crops"].size()
 
@@ -81,6 +85,7 @@ def collate_data_and_cast(
         B = coll_global_crops.size(0)
 
     else:  # on cpu
+        # list of samples of len B, each sample has (x,y), and x of len #gc of #lc
         n_global_crops = len(samples[0][0]["global_crops"])
         n_local_crops = len(samples[0][0]["local_crops"])
 
@@ -106,6 +111,10 @@ def collate_data_and_cast(
             coll_local_crops = rearrange(
                 coll_local_crops, "(b c) n p -> b c p n", p=patch_size, c=c
             )
+
+            local_crop_len = [s[0]["local_crop_len"] for s in samples]
+            local_patch_pos = [s[0]["local_patch_pos"] for s in samples]
+            local_crop_dims = [s[0]["local_crop_dims"] for s in samples]
             # if random.random() > 0.9:
             #    print("coll_global_crops", coll_global_crops.shape)
             #    print("coll_local_crops", coll_local_crops.shape)
@@ -202,4 +211,7 @@ def collate_data_and_cast(
         ),
         "attn_mask_gc": attn_mask_gc,
         "attn_mask_lc": attn_mask_lc,
+        "local_crop_len": local_crop_len,
+        "local_patch_pos": local_patch_pos,
+        "local_crop_dims": local_crop_dims,
     }

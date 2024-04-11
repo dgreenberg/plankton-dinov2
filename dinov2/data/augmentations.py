@@ -4,6 +4,7 @@
 # found in the LICENSE file in the root directory of this source tree.
 
 import logging
+import sys
 from enum import Enum
 
 import numpy as np
@@ -25,7 +26,9 @@ from .transforms import (
 )
 
 logger = logging.getLogger("dinov2")
-MAX_PATCHES = 1000
+MAX_PATCHES = 900
+MIN_NB_PATCHES_IN_CROP = 10
+BASE_LC_NB = 8
 
 
 class SegmentationAlgo(Enum):
@@ -289,14 +292,7 @@ class DataAugmentationDINO(object):
 
     def make_seg_crops(self, image, seg_algo):
         # image : C H W
-        """
-        orig_img_dims = image.shape
-        resize_op = v2.Resize(
-            orig_img_dims[1:],
-            interpolation=InterpolationMode.NEAREST_EXACT,
-            antialias=False,
-        )
-        """
+
         c, h, w = image.shape
         if seg_algo == SegmentationAlgo.FELZENSWALB.value:
             segments = felzenszwalb(
@@ -318,39 +314,45 @@ class DataAugmentationDINO(object):
 
         def seg_to_patched_seg(segments, image_gray):
             segments = segments / (segments.max() + 1e-5)
-            conv_input = torch.tensor(
-                segments[None, :, :]
-            )  # on color images segments can be 3 H W?
+            conv_input = torch.tensor(segments[None, :, :])
+
             pooled_seg = self.patch_maxpool_op(conv_input)
-            # resized_masks = resize_op(pooled_seg)
+
             resized_masks = pooled_seg.repeat_interleave(
                 self.patch_size, dim=1
-            ).repeat_interleave(self.patch_size, dim=2)
+            ).repeat_interleave(self.patch_size, dim=2)  # back to orig shape
             # assert torch.all(resized_masks_alt == resized_masks)
 
             resized_masks = resized_masks[0, :, :]
             nb_seg = len(np.unique(resized_masks))
-            resized_masks_int = (resized_masks * nb_seg).to(torch.int32)
 
             # map tensor to continuous int values
-            unique_vals = torch.unique(resized_masks_int)
-            lt = torch.full((int(resized_masks_int.max()) + 1,), -1)
-            lt[unique_vals] = torch.arange(len(unique_vals))
-            resized_masks_int = lt[resized_masks_int]
+            def map_to_cont_int_vals(input: torch.Tensor, max_val: int):
+                input_int = (input * max_val).to(torch.int32)
+                unique_vals = torch.unique(input_int)
+                lt = torch.full((int(input_int.max()) + 1,), -1)
+                lt[unique_vals] = torch.arange(len(unique_vals))
+                output = lt[input_int]
+                return output
 
+            resized_masks_int = map_to_cont_int_vals(resized_masks, max_val=nb_seg)
+            pooled_seg_int = map_to_cont_int_vals(pooled_seg, max_val=nb_seg)
             # update nb_seg
             nb_seg = len(np.unique(resized_masks_int))
             # First, create a mask for each segment
-            masks = []
+            masks, patches_pos_list = [], []
             for mask_idx in range(nb_seg):
                 matching_mask = resized_masks_int == mask_idx
-                if (
-                    torch.numel(matching_mask > 0) > self.patch_size * self.patch_size
+                if torch.numel(matching_mask > 0) > (
+                    self.patch_size * self.patch_size * MIN_NB_PATCHES_IN_CROP
                 ):  # possible that some masks are 0
                     masks.append(resized_masks_int == mask_idx)
+                    patch_pos_list = torch.where(
+                        pooled_seg_int[0, :, :].ravel() == mask_idx
+                    )
+                    patches_pos_list.append(patch_pos_list)
 
             masks = torch.stack(masks)
-
             # Then, find the bounding boxes for each segment
             bboxes = masks_to_boxes(masks)  # (x1, y1, x2, y2)
 
@@ -362,16 +364,10 @@ class DataAugmentationDINO(object):
                 # first bbox crop, then segment
                 bounded_mask = mask[bbox[1] : bbox[3] + 1, bbox[0] : bbox[2] + 1]
                 bounded_image = image_gray[bbox[1] : bbox[3] + 1, bbox[0] : bbox[2] + 1]
-                """
-                # first seg then bbox (less mem eff)
-                fragment = torch.zeros(mask.shape, dtype=torch.float32)
-                fragment[mask] = image_gray[mask]
-                fragment = fragment[bbox[1] : bbox[3], bbox[0] : bbox[2]]
-                """
                 bounded_images.append(bounded_image)
                 bounded_masks.append(bounded_mask)
 
-            return bounded_images, bounded_masks, resized_masks_int, bboxes
+            return bounded_images, bounded_masks, bboxes, patches_pos_list
 
         return seg_to_patched_seg(segments, image[0, :, :])
 
@@ -394,6 +390,106 @@ class DataAugmentationDINO(object):
             mode="replicate",
         )
 
+    def crop_to_patches(self, crop):
+        # B is usually 1 here
+        if len(crop.size()) == 3:
+            crop = crop[None, :, :, :]
+        b, c, h, w = crop.size()
+
+        patches = crop.unfold(-1, self.patch_size, self.patch_size).unfold(
+            -3, self.patch_size, self.patch_size
+        )
+        patches = rearrange(
+            patches,
+            "b c n1 n2 p1 p2 -> b c (n1 n2 p2) p1",
+            b=b,
+            c=c,
+            p1=self.patch_size,
+            p2=self.patch_size,
+        )
+        return patches
+
+    def select_and_concat_nonzero_patches(
+        self,
+        local_crops,
+        masks,
+        image,
+        nb_gc_patches=0,
+        local_patch_pos_list=None,
+        bboxes=None,
+    ):
+        # Select non-zero 14x14 patches from local_crops and flat concat
+        # Input: list N N_p [c p p]
+        # Output: C P NxP
+        # TODO: remove local_patch_pos_list
+        tot_patches = nb_gc_patches
+        list_flat_patches, crop_len_list = [], []
+        filtered_patch_pos_list, filtered_bboxes = [], []
+        for crop, mask, local_patch_pos, bbox in zip(
+            local_crops, masks, local_patch_pos_list, bboxes
+        ):
+            mask_patches = self.crop_to_patches(mask).squeeze()  # c (n p) p
+            img_patches = self.crop_to_patches(crop).squeeze()  # c (n p) p
+            mask_patches = torch.chunk(
+                mask_patches, chunks=mask_patches.shape[1] // self.patch_size, dim=1
+            )
+            img_patches = torch.chunk(
+                img_patches, chunks=img_patches.shape[1] // self.patch_size, dim=1
+            )
+            # lists are n [c p p]
+            # local_patch_pos = local_patch_pos[0]
+            if (tot_patches + len(img_patches)) >= MAX_PATCHES:
+                if len(crop_len_list) < 1:  # if seg fails, revert to std patching
+                    print("revert to std patching")
+                    local_crop = [
+                        self.crop_to_patches(
+                            self.local_transfo(self.std_augmentation_local(image))
+                        ).squeeze()  # c (n p) p
+                        for _ in range(BASE_LC_NB)  # 8 is std local crops nb
+                    ]
+                    flat_patches = torch.cat(local_crop, dim=1)  # c (n_c p) p
+
+                    break
+                else:
+                    # otherwise, we collected enough patches and exit the loop
+                    break
+                # sometimes seg fails and one crop has more than max patches
+            selected_patches, selected_patch_pos = [], []
+            for i, (mask_patch, img_patch) in enumerate(zip(mask_patches, img_patches)):
+                if (
+                    torch.any(mask_patch) > 0 and torch.var(img_patch) > 2e-5
+                ):  # <= 1e-4 is probably uninformative
+                    selected_patches.append(img_patch.transpose(-1, -2))
+                    selected_patch_pos.append(i)
+
+            curr_nb_patches = len(selected_patches)
+            if curr_nb_patches == 0:  # if no patches were selectionned
+                continue
+
+            tot_patches += curr_nb_patches
+            crop_len_list.append(curr_nb_patches)
+            selected_patches = torch.cat(selected_patches, dim=1)  # c (n_p p) p
+            list_flat_patches.append(selected_patches)
+            filtered_patch_pos_list.append(selected_patch_pos)
+            filtered_bboxes.append(bbox)
+
+        # list_flat_patches n_crop (c (n_p p) p)
+        flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
+        filtered_bboxes = torch.stack(filtered_bboxes)
+        crop_len = torch.Tensor(crop_len_list)
+        # print("crop_len", crop_len, np.sum(crop_len))
+        if tot_patches > MAX_PATCHES:
+            print(
+                f"WARNING: flat_patches too big dim: ({flat_patches.shape[1]}), {int(flat_patches.shape[1]/self.patch_size)} local crops tokens",
+                f"nb_loc_crops: {len(list_flat_patches)}",
+            )
+        return (
+            flat_patches,
+            crop_len,
+            filtered_patch_pos_list,
+            filtered_bboxes,
+        )
+
     def __call__(self, image):
         # image : C H W
         output = {}
@@ -410,40 +506,21 @@ class DataAugmentationDINO(object):
         im2_base = self.geometric_augmentation_global(image_global)
         global_crop_2 = self.global_transfo2(im2_base)
 
-        def crop_to_patches(crop):
-            # B is usually 1 here ?
-            b, c, h, w = crop.size()
-
-            patches = crop.unfold(-1, self.patch_size, self.patch_size).unfold(
-                -3, self.patch_size, self.patch_size
-            )
-            patches = rearrange(
-                patches,
-                "b c n1 n2 p1 p2 -> b c (n1 n2 p2) p1",
-                b=b,
-                c=c,
-                p1=self.patch_size,
-                p2=self.patch_size,
-            )
-            return patches
-
         global_crops = torch.cat(
-            [crop_to_patches(global_crop_1), crop_to_patches(global_crop_2)], dim=0
-        )  # 2 b c (n p) p
+            [self.crop_to_patches(global_crop_1), self.crop_to_patches(global_crop_2)],
+            dim=0,
+        )  # (2 b) c (n p) p
         nb_gc_patches = (global_crops.shape[2] / self.patch_size) * 2
         output["global_crops"] = global_crops
-        # print('output["global_crops"]', output["global_crops"].shape)
-
-        # global crops for teacher:
-        # output["global_crops_teacher"] = [global_crop_1, global_crop_2]
 
         # local crops:
         if self.do_seg_crops:
-            local_crops, masks, pooled_seg, bboxes = self.make_seg_crops(
+            local_crops, masks, bboxes, local_patch_pos_list = self.make_seg_crops(
                 image, seg_algo=self.do_seg_crops
             )
             # masks = [mask[None, :, :].repeat((3, 1, 1)) for mask in masks]
 
+            # Augment crops and masks
             local_crops, masks = list(
                 zip(
                     *[
@@ -455,105 +532,36 @@ class DataAugmentationDINO(object):
                     ]
                 )
             )
+            # masks back to bool
             masks = [
                 mask[0, :, :] > 0  # to bool
                 for mask in masks
             ]
+            # crops to list of patches, masked p are dropped
 
-            fragments = []
-            for crop, mask in zip(local_crops, masks):
-                fragment = torch.zeros_like(crop, dtype=torch.float32)
-                fragment[:, mask] = crop[:, mask]
-                fragments.append(fragment)
-
-            def select_and_concat_nonzero_patches(local_crops, image, nb_gc_patches=0):
-                # Select non-zero 14x14 patches from local_crops and flat concat
-                # Input: list N x [C H W]
-                # Output: C P NxP
-                exit_loop = False
-                tot_patches = 0
-                list_flat_patches = []
-                crop_len_list = []
-                for local_crop in local_crops:
-                    if len(local_crop.shape) > 3:
-                        local_crop = local_crop[0]
-                    C, H, W = local_crop.shape
-                    tot_patches += (H // self.patch_size) * (W // self.patch_size)
-
-                    if (tot_patches + nb_gc_patches) >= MAX_PATCHES:
-                        if (
-                            len(crop_len_list) <= 1
-                        ):  # if seg fails, revert to std patching
-                            local_crop = [
-                                self.local_transfo(
-                                    self.std_augmentation_local(image)
-                                ).squeeze()
-                                for _ in range(8)  # 8 is std local crops nb
-                            ]
-                            local_crop = torch.cat(
-                                local_crop, dim=1
-                            )  # c (n_c lc_size) lc_size
-
-                            exit_loop = True
-                        else:
-                            # otherwise, we collected enought patches and exit the loop
-                            break
-                        # PROBLEM, sometimes seg fails and one crop has more than max patches
-
-                    patches = local_crop.unfold(
-                        1, self.patch_size, self.patch_size
-                    ).unfold(2, self.patch_size, self.patch_size)
-                    unfold_shape = patches.size()
-
-                    # c x1 x2 p p
-                    patches = patches.reshape(
-                        C,
-                        unfold_shape[1] * unfold_shape[2] * self.patch_size,
-                        self.patch_size,
-                    )  # c (n p) p
-
-                    selected_patches = []
-                    patches_list = patches.chunk(
-                        patches.shape[1] // self.patch_size, dim=1
-                    )
-                    for patch in patches_list:  # C P P
-                        if (
-                            abs(torch.mean(patch)) > 1e-4
-                        ):  # <= 1e-4 is probably uninformative
-                            selected_patches.append(patch.transpose(-1, -2))
-
-                    curr_nb_patches = len(selected_patches)
-                    tot_patches += curr_nb_patches
-
-                    crop_len_list.append(curr_nb_patches)
-
-                    selected_patches = torch.cat(selected_patches, dim=1)  # c (n_p p) p
-
-                    list_flat_patches.append(selected_patches)
-
-                    if exit_loop:
-                        break
-                # list_flat_patches n_crop (c (n_p p) p)
-                flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
-                # print("crop_len_list", crop_len_list, np.sum(crop_len_list))
-                if flat_patches.size(1) / 14 > 400:
-                    print(
-                        "WARNING: flat_patches too big, over 400 tokens",
-                        flat_patches.shape,
-                        "#",
-                        len(list_flat_patches),
-                    )
-                return flat_patches, crop_len_list
-
-            flat_patches, crop_len_list = select_and_concat_nonzero_patches(
-                fragments, image=image, nb_gc_patches=nb_gc_patches
+            (
+                local_crops,
+                local_crop_len,
+                filtered_patch_pos_list,
+                filtered_bboxes,
+            ) = self.select_and_concat_nonzero_patches(
+                local_crops,
+                masks,
+                image=image,
+                nb_gc_patches=nb_gc_patches,
+                local_patch_pos_list=local_patch_pos_list,
+                bboxes=bboxes,
             )
             # output["local_crops_vis"] = fragments  # for visualization
-            output["local_crops"] = flat_patches
-            output["local_crop_len"] = crop_len_list
-            # output["pooled_seg"] = pooled_seg
+            output["local_crops"] = local_crops
+            output["local_crop_len"] = local_crop_len
+            output["local_patch_pos"] = filtered_patch_pos_list
             crop_dims = torch.cat(
-                [bboxes[:, 1:2] - bboxes[:, :0], bboxes[:, 2:3] - bboxes[:, 0:1]], dim=1
+                [
+                    filtered_bboxes[:, 1:2] - filtered_bboxes[:, :0],
+                    filtered_bboxes[:, 2:3] - filtered_bboxes[:, 0:1],
+                ],
+                dim=1,
             )  # N (W H)
             output["local_crop_dims"] = crop_dims
         else:

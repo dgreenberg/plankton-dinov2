@@ -26,6 +26,7 @@ from dinov2.layers import (
 from dinov2.layers import (
     NestedTensorBlock as Block,
 )
+from dinov2.utils.utils import exists
 
 logger = logging.getLogger("dinov2")
 
@@ -50,9 +51,9 @@ def named_apply(
 
 
 class BlockChunk(nn.ModuleList):
-    def forward(self, x, attn_mask=None):
+    def forward(self, x, attn_mask=None, local_crop_len=None):
         for b in self:
-            x = b(x, attn_mask)
+            x = b(x, attn_mask, local_crop_len)
         return x
 
 
@@ -273,14 +274,24 @@ class DinoVisionTransformer(nn.Module):
             )
             assert (w0, h0) == crop_pos_embed.shape[-2:]
             crop_pos_embed = crop_pos_embed.permute(0, 2, 3, 1).view(1, -1, x_dim)
-            # TODO: get kept patch nbs list as param and keep only these, use crop_nb_list
+            # keep only pos_embeds of selected patches
+            crop_pos_embed = torch.index_select(
+                torch.flatten(crop_pos_embed, start_dim=-2), dim=-1, index=crop_nbs
+            )
             crop_pos_embed_list.append(crop_pos_embed)
 
         return torch.cat(
             ([class_pos_embed.unsqueeze(0)] + crop_pos_embed_list), dim=1
         ).to(previous_dtype)
 
-    def prepare_tokens_with_masks(self, x, masks=None, free_shapes=False):
+    def prepare_tokens_with_masks(
+        self,
+        x,
+        masks=None,
+        free_shapes=False,
+        local_patch_pos=None,
+        local_crop_dims=None,
+    ):
         # TODO: pass free_shapes, crop_dims, crop_nb_list
         # newly created pos embed vect also needs padding
         # b c w h OR b c p (n p)
@@ -294,7 +305,7 @@ class DinoVisionTransformer(nn.Module):
         x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
         if free_shapes:
             interpolated_pos_embeds = self.interpolate_pos_encoding_lc_navit(
-                x, crop_dims=None, crop_nb_list=None
+                x, crop_dims=local_crop_dims, crop_nb_list=local_patch_pos
             )
         else:
             interpolated_pos_embeds = self.interpolate_pos_encoding(x, w, h)
@@ -313,24 +324,30 @@ class DinoVisionTransformer(nn.Module):
 
         return x
 
-    def forward_features_list(self, x_list, masks_list, attn_mask_list=None):
-        x = [
-            self.prepare_tokens_with_masks(x, masks)
-            for x, masks in zip(x_list, masks_list)
-        ]
+    def forward_features_list(
+        self,
+        x_list,
+        masks_list,
+        attn_mask_list=None,
+        local_crop_len=None,
+        local_patch_pos=None,
+        local_crop_dims=None,
+    ):
+        if exists(local_patch_pos) and exists(local_crop_dims):
+            x = [
+                self.prepare_tokens_with_masks(x, masks, patch_pos, crop_dims)
+                for x, masks, patch_pos, crop_dims in zip(x_list, masks_list)
+            ]
+        else:
+            x = [
+                self.prepare_tokens_with_masks(x, masks)
+                for x, masks in zip(x_list, masks_list)
+            ]
         # x_list = [global_crops, local_crops]
         # masks_list = [masks, None]
         # x[0] = B C H W
-        """
-        x = [
-            self.pad_token_list_to_fixed_len(x, mask)
-            for el, mask in zip(x_list, masks_list)
-            if el.shape[1] < self.num_tokens
-        ]
-        # Add padding tokens to reach fixed len
-        """
         for blk in self.blocks:
-            x = blk(x, attn_mask=attn_mask_list)
+            x = blk(x, attn_mask=attn_mask_list, local_crop_len=local_crop_len)
 
         all_x = x
         output = []
@@ -369,9 +386,24 @@ class DinoVisionTransformer(nn.Module):
         pad_tokens = torch.ones(b, n_pad_tokens, d)
         return torch.cat([token_tensor, pad_tokens], dim=1)
 
-    def forward_features(self, x, masks=None, attn_masks=None):
+    def forward_features(
+        self,
+        x,
+        masks=None,
+        attn_masks=None,
+        local_crop_len=None,
+        local_patch_pos=None,
+        local_crop_dims=None,
+    ):
         if isinstance(x, list):
-            return self.forward_features_list(x, masks, attn_masks)
+            return self.forward_features_list(
+                x,
+                masks,
+                attn_masks,
+                local_crop_len=local_crop_len,
+                local_patch_pos=local_patch_pos,
+                local_crop_dims=local_crop_dims,
+            )
 
         x = self.prepare_tokens_with_masks(x, masks)
 
