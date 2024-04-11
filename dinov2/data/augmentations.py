@@ -457,7 +457,7 @@ class DataAugmentationDINO(object):
             selected_patches, selected_patch_pos = [], []
             for i, (mask_patch, img_patch) in enumerate(zip(mask_patches, img_patches)):
                 if (
-                    torch.any(mask_patch) > 0 and torch.var(img_patch) > 2e-5
+                    torch.any(mask_patch) > 0 and torch.var(img_patch) > 1e-5
                 ):  # <= 1e-4 is probably uninformative
                     selected_patches.append(img_patch.transpose(-1, -2))
                     selected_patch_pos.append(i)
