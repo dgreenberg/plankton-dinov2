@@ -17,7 +17,7 @@ def collate_data_and_cast(
     dtype,
     n_tokens=None,
     mask_generator=None,
-    free_shapes=False,
+    free_shapes=None,
     patch_size=14,
 ):
     attn_mask_lc = attn_mask_gc = None

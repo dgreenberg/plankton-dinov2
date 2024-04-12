@@ -354,6 +354,8 @@ class SSLMetaArch(nn.Module):
             local_crop_dims=[None, local_crop_dims],
         )  # only student global crops are masked
 
+        # out_gc cls:(32, 384) patch_tokens:(n_c b) var_dim ntw_dim(384)
+        # out_lc cls:(16, 384) patch_tokens:(n_c b) var_dim ntw_dim(384) ex:(16, 336, 384)
         inputs_for_student_head_list = []
 
         # 1a: local crops cls tokens
@@ -404,10 +406,14 @@ class SSLMetaArch(nn.Module):
                 )[:n_masked_patches]
 
         # 2: run
+        # cat inputs = student_local_cls_tokens, student_global_cls_tokens, ibot_student_patch_tokens?
         _attn_bias, cat_inputs = fmha.BlockDiagonalMask.from_tensor_list(
             inputs_for_student_head_list
         )
-        outputs_list = _attn_bias.split(self.student.dino_head(cat_inputs))
+        student_head_output = self.student.dino_head(cat_inputs)
+        # print(f"student_head_output; {student_head_output.shape}")
+        # student_head_output (1 2592 4096)
+        outputs_list = _attn_bias.split(student_head_output)
         # print(
         #    f"lc_out_list: {len(outputs_list)}, {[out.shape for out in outputs_list]}"
         # )
@@ -430,7 +436,7 @@ class SSLMetaArch(nn.Module):
             #    "student_local_cls_tokens_after_head",
             #    student_local_cls_tokens_after_head.shape,
             # )
-            # student_local_cls_tokens_after_head torch.Size([32, 4096])
+            # student_local_cls_tokens_after_head (b n_crops) dim(4096)
             dino_local_crops_loss = self.dino_loss(
                 student_output_list=student_local_cls_tokens_after_head.chunk(
                     n_local_crops

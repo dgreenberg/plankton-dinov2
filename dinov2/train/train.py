@@ -33,7 +33,7 @@ from dinov2.logging import MetricLogger
 from dinov2.models.vision_transformer import count_parameters
 from dinov2.train.ssl_meta_arch import SSLMetaArch
 from dinov2.utils.config import setup
-from dinov2.utils.utils import CosineScheduler, exists
+from dinov2.utils.utils import CosineScheduler, exists, none_or_str
 
 torch.backends.cuda.matmul.allow_tf32 = (
     True  # PyTorch 1.12 sets this to False by default
@@ -148,7 +148,7 @@ def select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype):
             n_tokens=n_tokens,
             mask_generator=mask_generator,
             dtype=inputs_dtype,
-            free_shapes=cfg.crops.free_shapes,
+            free_shapes=none_or_str(cfg.crops.free_shapes),
         )
         collate_fn_gpu = None
     else:
@@ -160,7 +160,7 @@ def select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype):
             n_tokens=n_tokens,
             mask_generator=mask_generator,
             dtype=inputs_dtype,
-            free_shapes=cfg.crops.free_shapes,
+            free_shapes=none_or_str(cfg.crops.free_shapes),
         )
     return collate_fn_cpu, collate_fn_gpu
 
@@ -175,7 +175,7 @@ def select_augmentations(cfg):
         "local_crops_size": cfg.crops.local_crops_size,
         "patch_size": cfg.student.patch_size,
         "use_native_res": cfg.crops.use_native_res,
-        "do_seg_crops": cfg.crops.free_shapes,
+        "do_seg_crops": none_or_str(cfg.crops.free_shapes),
     }
     if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
         data_transform_cpu = DataAugmentationDINO(use_kornia=False, **aug_kwargs)

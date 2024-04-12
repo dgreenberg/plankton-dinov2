@@ -261,3 +261,9 @@ def has_batchnorms(model):
         if isinstance(module, bn_types):
             return True
     return False
+
+
+def none_or_str(value):
+    if value.lower() == "none":
+        return None
+    return value
