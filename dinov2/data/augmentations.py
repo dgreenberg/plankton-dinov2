@@ -18,6 +18,8 @@ from torchvision.ops import masks_to_boxes
 from torchvision.transforms import v2
 from torchvision.transforms.functional import InterpolationMode
 
+from dinov2.utils.utils import exists
+
 from .transforms import (
     GaussianBlur,
     KorniaGaussianBlur,
@@ -487,9 +489,12 @@ class DataAugmentationDINO(object):
                 f"tot_patches: {tot_patches}, len: {len(crop_len_list)}, {crop_len_list}"
             )
             flat_patches = std_patching(image)
+            crop_len_list = BASE_LC_NB * [98]
+            filtered_bboxes = None
         else:
             flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
-        filtered_bboxes = torch.stack(filtered_bboxes)
+            filtered_bboxes = torch.stack(filtered_bboxes)
+
         crop_len = torch.Tensor(crop_len_list)
         # print("crop_len", crop_len, np.sum(crop_len))
         if tot_patches > MAX_PATCHES:
@@ -570,13 +575,16 @@ class DataAugmentationDINO(object):
             output["local_crops"] = local_crops
             output["local_crop_len"] = local_crop_len
             output["local_patch_pos"] = filtered_patch_pos_list
-            crop_dims = torch.cat(
-                [
-                    filtered_bboxes[:, 1:2] - filtered_bboxes[:, :0],
-                    filtered_bboxes[:, 2:3] - filtered_bboxes[:, 0:1],
-                ],
-                dim=1,
-            )  # N (W H)
+            if exists(filtered_bboxes):
+                crop_dims = torch.cat(
+                    [
+                        filtered_bboxes[:, 1:2] - filtered_bboxes[:, :0],
+                        filtered_bboxes[:, 2:3] - filtered_bboxes[:, 0:1],
+                    ],
+                    dim=1,
+                )  # N 2
+            else:
+                crop_dims = torch.tile(torch.Tensor(1, 98, 98), (8, 1, 1))
             output["local_crop_dims"] = crop_dims
         else:
             local_crops = [
