@@ -32,6 +32,7 @@ MAX_PATCHES = 900
 MIN_NB_PATCHES_IN_CROP = 10
 BASE_LC_NB = 8
 PATCH_THRESHOLD = 1e-5
+STD_CROP_SIZE = 98
 
 
 class SegmentationAlgo(Enum):
@@ -302,7 +303,7 @@ class DataAugmentationDINO(object):
                 image.permute((1, 2, 0)), scale=300, sigma=0.5, min_size=1000
             )
         elif seg_algo == SegmentationAlgo.SLIC.value:
-            n_segments = max(int((h * w) / (98 * 98)), 3)
+            n_segments = max(int((h * w) / (STD_CROP_SIZE * STD_CROP_SIZE)), 3)
             segments = slic(
                 image.permute((1, 2, 0)),
                 n_segments=n_segments,
@@ -489,7 +490,7 @@ class DataAugmentationDINO(object):
                 f"tot_patches: {tot_patches}, len: {len(crop_len_list)}, {crop_len_list}"
             )
             flat_patches = std_patching(image)
-            crop_len_list = BASE_LC_NB * [98]
+            crop_len_list = BASE_LC_NB * [STD_CROP_SIZE]
             filtered_bboxes = None
         else:
             flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
@@ -584,7 +585,9 @@ class DataAugmentationDINO(object):
                     dim=1,
                 )  # N 2
             else:
-                crop_dims = torch.tile(torch.Tensor(1, 98, 98), (8, 1, 1))
+                crop_dims = torch.tile(
+                    torch.Tensor(1, STD_CROP_SIZE, STD_CROP_SIZE), (8, 1, 1)
+                )
             output["local_crop_dims"] = crop_dims
         else:
             local_crops = [
