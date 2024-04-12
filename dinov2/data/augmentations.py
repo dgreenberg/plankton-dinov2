@@ -443,13 +443,17 @@ class DataAugmentationDINO(object):
             if (tot_patches + len(img_patches)) >= MAX_PATCHES:
                 if len(crop_len_list) < 1:  # if seg fails, revert to std patching
                     print("revert to std patching")
-                    local_crop = [
-                        self.crop_to_patches(
-                            self.local_transfo(self.std_augmentation_local(image))
-                        ).squeeze()  # c (n p) p
-                        for _ in range(BASE_LC_NB)  # 8 is std local crops nb
-                    ]
-                    flat_patches = torch.cat(local_crop, dim=1)  # c (n_c p) p
+
+                    def std_patching(image):
+                        local_crop = [
+                            self.crop_to_patches(
+                                self.local_transfo(self.std_augmentation_local(image))
+                            ).squeeze()  # c (n p) p
+                            for _ in range(BASE_LC_NB)  # 8 is std local crops nb
+                        ]
+                        return torch.cat(local_crop, dim=1)  # c (n_c p) p
+
+                    flat_patches = std_patching(image)
 
                     break
                 else:
@@ -478,7 +482,13 @@ class DataAugmentationDINO(object):
             filtered_bboxes.append(bbox)
 
         # list_flat_patches n_crop (c (n_p p) p)
-        flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
+        if len(list_flat_patches) == 0:
+            print(
+                f"tot_patches: {tot_patches}, len: {len(crop_len_list)}, {crop_len_list}"
+            )
+            flat_patches = std_patching(image)
+        else:
+            flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
         filtered_bboxes = torch.stack(filtered_bboxes)
         crop_len = torch.Tensor(crop_len_list)
         # print("crop_len", crop_len, np.sum(crop_len))

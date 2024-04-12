@@ -408,7 +408,11 @@ class SSLMetaArch(nn.Module):
             inputs_for_student_head_list
         )
         outputs_list = _attn_bias.split(self.student.dino_head(cat_inputs))
-        # print(f"lc_out_list: {len(outputs_list)}, {outputs_list[0].shape}")
+        # print(
+        #    f"lc_out_list: {len(outputs_list)}, {[out.shape for out in outputs_list]}"
+        # )
+        # lc_out_list: len=3, [torch.Size([1, 32, 4096]), torch.Size([1, 64, 4096]), torch.Size([1, 2496, 4096])]
+
         # 3a: local crops cls tokens
         student_local_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
 
@@ -426,6 +430,7 @@ class SSLMetaArch(nn.Module):
             #    "student_local_cls_tokens_after_head",
             #    student_local_cls_tokens_after_head.shape,
             # )
+            # student_local_cls_tokens_after_head torch.Size([32, 4096])
             dino_local_crops_loss = self.dino_loss(
                 student_output_list=student_local_cls_tokens_after_head.chunk(
                     n_local_crops
@@ -500,9 +505,17 @@ class SSLMetaArch(nn.Module):
     def fsdp_synchronize_streams(self):
         if self.need_to_synchronize_fsdp_streams:
             torch.cuda.synchronize()
-            self.student.dino_head._streams = self.teacher.dino_head._streams = (
-                self.student.backbone._streams
-            ) = self.teacher.backbone._streams
+            for attr in {
+                "_unshard_stream",
+                "_post_backward_stream",
+                "_pre_unshard_stream",
+                "_all_reduce_stream",
+                "_default_stream",
+            }:
+                stream = getattr(self.teacher.backbone, attr)
+                setattr(self.student.dino_head, attr, stream)
+                setattr(self.teacher.dino_head, attr, stream)
+                setattr(self.student.backbone, attr, stream)
             self.need_to_synchronize_fsdp_streams = False
 
     def update_teacher(self, m):
