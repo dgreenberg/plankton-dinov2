@@ -408,7 +408,7 @@ class SSLMetaArch(nn.Module):
             inputs_for_student_head_list
         )
         outputs_list = _attn_bias.split(self.student.dino_head(cat_inputs))
-
+        # print(f"lc_out_list: {len(outputs_list)}, {outputs_list[0].shape}")
         # 3a: local crops cls tokens
         student_local_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
 
@@ -422,6 +422,10 @@ class SSLMetaArch(nn.Module):
             )[:n_masked_patches]
 
         if n_local_crops > 0:
+            # print(
+            #    "student_local_cls_tokens_after_head",
+            #    student_local_cls_tokens_after_head.shape,
+            # )
             dino_local_crops_loss = self.dino_loss(
                 student_output_list=student_local_cls_tokens_after_head.chunk(
                     n_local_crops

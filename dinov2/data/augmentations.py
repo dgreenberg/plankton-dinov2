@@ -29,6 +29,7 @@ logger = logging.getLogger("dinov2")
 MAX_PATCHES = 900
 MIN_NB_PATCHES_IN_CROP = 10
 BASE_LC_NB = 8
+PATCH_THRESHOLD = 1e-5
 
 
 class SegmentationAlgo(Enum):
@@ -417,6 +418,7 @@ class DataAugmentationDINO(object):
         nb_gc_patches=0,
         local_patch_pos_list=None,
         bboxes=None,
+        do_drop_patches=False,
     ):
         # Select non-zero 14x14 patches from local_crops and flat concat
         # Input: list N N_p [c p p]
@@ -456,11 +458,13 @@ class DataAugmentationDINO(object):
                 # sometimes seg fails and one crop has more than max patches
             selected_patches, selected_patch_pos = [], []
             for i, (mask_patch, img_patch) in enumerate(zip(mask_patches, img_patches)):
-                if (
-                    torch.any(mask_patch) > 0 and torch.var(img_patch) > 1e-6
-                ):  # <= 1e-4 is probably uninformative
-                    selected_patches.append(img_patch.transpose(-1, -2))
-                    selected_patch_pos.append(i)
+                if torch.any(mask_patch) > 0:
+                    if (not do_drop_patches) or (
+                        do_drop_patches and torch.var(img_patch) > PATCH_THRESHOLD
+                    ):
+                        # TODO: add randomness to decide to transpose or not
+                        selected_patches.append(img_patch.transpose(-1, -2))
+                        selected_patch_pos.append(i)
 
             curr_nb_patches = len(selected_patches)
             if curr_nb_patches == 0:  # if no patches were selectionned
