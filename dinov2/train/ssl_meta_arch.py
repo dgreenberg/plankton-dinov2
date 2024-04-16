@@ -466,10 +466,10 @@ class SSLMetaArch(nn.Module):
                 chunked_student_local_cls_tokens_after_head = (
                     student_local_cls_tokens_after_head
                 )
-            print(
-                len(chunked_student_local_cls_tokens_after_head),
-                chunked_student_local_cls_tokens_after_head[0].shape,
-            )
+            # print(
+            #    len(chunked_student_local_cls_tokens_after_head),
+            #    chunked_student_local_cls_tokens_after_head[0].shape,
+            # )
             dino_local_crops_loss = self.dino_loss(
                 student_output_list=chunked_student_local_cls_tokens_after_head,
                 teacher_out_softmaxed_centered_list=teacher_dino_softmaxed_centered_list,
