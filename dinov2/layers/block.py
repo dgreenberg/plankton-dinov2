@@ -201,6 +201,10 @@ def get_attn_bias_and_cat(x_list, branges=None, seqlens=None):
         )
     else:
         tensors_bs1 = tuple(x.reshape([1, -1, *x.shape[2:]]) for x in x_list)
+        # tensors_bs1 [torch.Size([1, 16448, 384]), torch.Size([1, 9248, 384])]
+        # all_shapes ((64, 257), (32, 289))
+        # print("tensors_bs1", [el.shape for el in tensors_bs1])
+        # print("all_shapes", all_shapes)
         cat_tensors = torch.cat(tensors_bs1, dim=1)
 
     return attn_bias_cache[all_shapes], cat_tensors

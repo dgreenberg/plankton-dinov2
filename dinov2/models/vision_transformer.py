@@ -10,7 +10,7 @@
 import logging
 import math
 from functools import partial
-from typing import Callable, Sequence, Tuple, Union
+from typing import Callable, List, Optional, Sequence, Tuple, Union
 
 import torch
 import torch.nn as nn
@@ -81,6 +81,8 @@ class DinoVisionTransformer(nn.Module):
         num_register_tokens=0,
         interpolate_antialias=False,
         interpolate_offset=0.1,
+        free_shapes=None,
+        num_loc_crops=8,
     ):
         """
         Args:
@@ -129,6 +131,8 @@ class DinoVisionTransformer(nn.Module):
             embed_dim=embed_dim,
         )
         num_patches = self.patch_embed.num_patches
+        self.num_loc_crops = num_loc_crops
+        self.free_shapes = free_shapes
 
         self.cls_token = nn.Parameter(torch.zeros(1, 1, embed_dim))
         self.pos_embed = nn.Parameter(
@@ -248,6 +252,17 @@ class DinoVisionTransformer(nn.Module):
         )
 
     def interpolate_pos_encoding_lc_navit(self, x, crop_dims, crop_nb_list):
+        """
+        Interpolates position encoding for local crops of an image.
+
+        Args:
+            x: The input tensor.
+            crop_dims: A list of crop dimensions.
+            crop_nb_list: A list of crop numbers.
+
+        Returns:
+            A tensor of interpolated position encodings.
+        """
         previous_dtype = x.dtype
         N_ref = self.ref_pos_embed.shape[1] - 1
         ref_dim = self.ref_pos_embed.shape[-1]
@@ -258,8 +273,8 @@ class DinoVisionTransformer(nn.Module):
         print("x", x.shape, "ref", self.ref_pos_embed)
 
         ref_pos_embed = self.ref_pos_embed.float()
-        class_pos_embed = ref_pos_embed[:, 0]
-        ref_patch_pos_embed = ref_pos_embed[:, 1:]
+        class_pos_embed = ref_pos_embed[:, : self.num_loc_crops]
+        ref_patch_pos_embed = ref_pos_embed[:, self.num_loc_crops :]
         crop_pos_embed_list = []
         for crop_dim, crop_nbs in zip(crop_dims, crop_nb_list):
             w, h = crop_dim
@@ -286,13 +301,30 @@ class DinoVisionTransformer(nn.Module):
 
     def prepare_tokens_with_masks(
         self,
-        x,
-        masks=None,
-        free_shapes=False,
-        local_patch_pos=None,
-        local_crop_dims=None,
-    ):
-        # TODO: pass free_shapes, crop_dims, crop_nb_list
+        x: torch.Tensor,  # (b, c, w, h)
+        masks: Optional[torch.Tensor] = None,  # (b, w, h)
+        local_patch_pos: Optional[List[List[int]]] = None,
+        local_crop_dims: Optional[List[List[int]]] = None,
+    ) -> torch.Tensor:
+        """Prepare tokens with positional embeddings and masks.
+
+        Args:
+            x (torch.Tensor): input image, shape = (b, c, w, h)
+            masks (Optional[torch.Tensor], optional): masks to apply on input image. Defaults to None.
+            free_shapes (bool, optional): whether or not the input image shapes are variable.
+                Defaults to False.
+            local_patch_pos (Optional[List[List[int]]], optional): list of patch positions
+                for each image in the batch. Only used when free_shapes is True.
+                Defaults to None.
+            local_crop_dims (Optional[List[List[int]]], optional): list of image shapes
+                for each image in the batch. Only used when free_shapes is True.
+                Defaults to None.
+        Note: local_patch_pos and local_crop_dims are None for Global crops
+
+        Returns:
+            torch.Tensor: tokens with positional embeddings, shape = (b, n, d)
+        """
+
         # newly created pos embed vect also needs padding
         # b c w h OR b c p (n p)
         w, h = x.size(-2), x.size(-1)
@@ -302,10 +334,19 @@ class DinoVisionTransformer(nn.Module):
                 masks.unsqueeze(-1), self.mask_token.to(x.dtype).unsqueeze(0), x
             )
 
-        x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
-        if free_shapes:
+        if (
+            self.free_shapes and local_patch_pos is not None
+        ):  # if local crops w free shape
+            cls_token = torch.tile(self.cls_token, dims=(1, self.num_loc_crops, 1))
+        else:
+            cls_token = self.cls_token
+        x = torch.cat((cls_token.expand(x.shape[0], -1, -1), x), dim=1)
+
+        if self.free_shapes and local_patch_pos is not None:
             interpolated_pos_embeds = self.interpolate_pos_encoding_lc_navit(
-                x, crop_dims=local_crop_dims, crop_nb_list=local_patch_pos
+                x,
+                crop_dims=local_crop_dims,
+                crop_nb_list=local_patch_pos,
             )
         else:
             interpolated_pos_embeds = self.interpolate_pos_encoding(x, w, h)
@@ -315,9 +356,11 @@ class DinoVisionTransformer(nn.Module):
         if self.register_tokens is not None:
             x = torch.cat(
                 (
-                    x[:, :1],
+                    x[
+                        :, : self.cls_token.shape[1]
+                    ],  # TODO: rework this to put at correct position
                     self.register_tokens.expand(x.shape[0], -1, -1),
-                    x[:, 1:],
+                    x[:, self.cls_token.shape[1] :],
                 ),
                 dim=1,
             )
@@ -333,10 +376,30 @@ class DinoVisionTransformer(nn.Module):
         local_patch_pos=None,
         local_crop_dims=None,
     ):
+        """
+        Forward pass for a list of input features with masks.
+        Args:
+            x_list: List of input features.
+            masks_list: List of masks corresponding to the input features.
+            attn_mask_list: Optional list of attention masks.
+            local_crop_len: Length of local crop.
+            local_patch_pos: Position of local patches.
+            local_crop_dims: Dimensions of local crops.
+
+        Returns:
+            List of dictionaries containing normalized input features and masks.
+        """
         if exists(local_patch_pos) and exists(local_crop_dims):
             x = [
-                self.prepare_tokens_with_masks(x, masks, patch_pos, crop_dims)
-                for x, masks, patch_pos, crop_dims in zip(x_list, masks_list)
+                self.prepare_tokens_with_masks(
+                    x,
+                    masks,
+                    local_patch_pos=patch_pos,
+                    local_crop_dims=crop_dims,
+                )
+                for x, masks, patch_pos, crop_dims in zip(
+                    x_list, masks_list, local_patch_pos, local_crop_dims
+                )
             ]
         else:
             x = [
@@ -346,17 +409,28 @@ class DinoVisionTransformer(nn.Module):
         # x_list = [global_crops, local_crops]
         # masks_list = [masks, None]
         # x[0] = B C H W
+        # x[1] = B N D
         for blk in self.blocks:
             x = blk(x, attn_mask=attn_mask_list, local_crop_len=local_crop_len)
 
         all_x = x
         output = []
-        for x, masks in zip(all_x, masks_list):
+        for i, (x, masks) in enumerate(zip(all_x, masks_list)):
             x_norm = self.norm(x)
+            if (
+                self.free_shapes
+                and local_patch_pos is not None
+                and local_patch_pos[i] is not None
+            ):
+                n_cls_tokens = self.num_loc_crops
+            else:
+                n_cls_tokens = 1
             output.append(
                 {
-                    "x_norm_clstoken": x_norm[:, 0],
-                    "x_norm_regtokens": x_norm[:, 1 : self.num_register_tokens + 1],
+                    "x_norm_clstoken": x_norm[:, :n_cls_tokens],
+                    "x_norm_regtokens": x_norm[
+                        :, n_cls_tokens : self.num_register_tokens + 1
+                    ],
                     "x_norm_patchtokens": x_norm[:, self.num_register_tokens + 1 :],
                     "x_prenorm": x,
                     "masks": masks,
@@ -405,6 +479,7 @@ class DinoVisionTransformer(nn.Module):
                 local_crop_dims=local_crop_dims,
             )
 
+        # if not list, we only have gc, hence no local_patch_pos or local_crop_dims
         x = self.prepare_tokens_with_masks(x, masks)
 
         """ # Already done in collate

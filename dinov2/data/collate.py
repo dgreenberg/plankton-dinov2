@@ -121,6 +121,9 @@ def collate_data_and_cast(
         else:
             coll_global_crops = torch.stack(coll_global_crops)
             coll_local_crops = torch.stack(coll_local_crops)
+            local_crop_len = None
+            local_patch_pos = None
+            local_crop_dims = None
 
         B = len(coll_global_crops)
     N = n_tokens

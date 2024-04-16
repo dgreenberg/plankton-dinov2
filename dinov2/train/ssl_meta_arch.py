@@ -171,6 +171,7 @@ class SSLMetaArch(nn.Module):
     def forward_backward(self, images, teacher_temp):
         n_global_crops = 2
         n_local_crops = self.cfg.crops.local_crops_number
+        do_free_shapes = self.cfg.crops.free_shapes
 
         attn_mask_gc = attn_mask_gc = None
         if not images["collated_global_crops"].is_cuda:
@@ -201,6 +202,7 @@ class SSLMetaArch(nn.Module):
             local_patch_pos = images["local_patch_pos"]
             local_crop_dims = images["local_crop_dims"]
 
+        # local_crops: b c p (n p)
         # print("ssl ", global_crops.shape, local_crops.shape)
         n_masked_patches = mask_indices_list.shape[0]
         upperbound = images["upperbound"]
@@ -360,13 +362,25 @@ class SSLMetaArch(nn.Module):
 
         # 1a: local crops cls tokens
         student_local_cls_tokens = student_local_backbone_output_dict["x_norm_clstoken"]
-        inputs_for_student_head_list.append(student_local_cls_tokens.unsqueeze(0))
+        # student_local_cls_tokens b n_lc d(=4096)
+        if do_free_shapes:
+            student_local_cls_tokens = torch.chunk(
+                student_local_cls_tokens, n_local_crops, dim=1
+            )
+            for token in student_local_cls_tokens:
+                inputs_for_student_head_list.append(token.squeeze().unsqueeze(0))
+        else:
+            inputs_for_student_head_list.append(
+                student_local_cls_tokens.squeeze().unsqueeze(0)
+            )
 
         # 1b: global crops cls tokens
         student_global_cls_tokens = student_global_backbone_output_dict[
             "x_norm_clstoken"
         ]
-        inputs_for_student_head_list.append(student_global_cls_tokens.unsqueeze(0))
+        inputs_for_student_head_list.append(
+            student_global_cls_tokens.squeeze().unsqueeze(0)
+        )
 
         # 1c: global crops patch tokens
         if do_ibot:
@@ -406,12 +420,13 @@ class SSLMetaArch(nn.Module):
                 )[:n_masked_patches]
 
         # 2: run
-        # cat inputs = student_local_cls_tokens, student_global_cls_tokens, ibot_student_patch_tokens?
+        # cat inputs = student_local_cls_tokens, student_global_cls_tokens, ibot_student_patch_tokens
+        # each shape = [1, var_dim(=b,n_gc*b,var_dim), dim]
         _attn_bias, cat_inputs = fmha.BlockDiagonalMask.from_tensor_list(
             inputs_for_student_head_list
         )
+
         student_head_output = self.student.dino_head(cat_inputs)
-        # print(f"student_head_output; {student_head_output.shape}")
         # student_head_output (1 2592 4096)
         outputs_list = _attn_bias.split(student_head_output)
         # print(
@@ -420,7 +435,14 @@ class SSLMetaArch(nn.Module):
         # lc_out_list: len=3, [torch.Size([1, 32, 4096]), torch.Size([1, 64, 4096]), torch.Size([1, 2496, 4096])]
 
         # 3a: local crops cls tokens
-        student_local_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
+        if do_free_shapes:
+            student_local_cls_tokens_after_head = []
+            for i in range(n_local_crops):
+                student_local_cls_tokens_after_head.append(
+                    outputs_list.pop(0).squeeze()
+                )
+        else:
+            student_local_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
 
         # 3b: global crops cls tokens
         student_global_cls_tokens_after_head = outputs_list.pop(0).squeeze(0)
@@ -432,15 +454,24 @@ class SSLMetaArch(nn.Module):
             )[:n_masked_patches]
 
         if n_local_crops > 0:
-            # print(
-            #    "student_local_cls_tokens_after_head",
-            #    student_local_cls_tokens_after_head.shape,
-            # )
             # student_local_cls_tokens_after_head (b n_crops) dim(4096)
+            # or n_c (1 4096)
+
+            # compute loss
+            if not do_free_shapes:
+                chunked_student_local_cls_tokens_after_head = (
+                    student_local_cls_tokens_after_head.chunk(n_local_crops, dim=0)
+                )
+            else:
+                chunked_student_local_cls_tokens_after_head = (
+                    student_local_cls_tokens_after_head
+                )
+            print(
+                len(chunked_student_local_cls_tokens_after_head),
+                chunked_student_local_cls_tokens_after_head[0].shape,
+            )
             dino_local_crops_loss = self.dino_loss(
-                student_output_list=student_local_cls_tokens_after_head.chunk(
-                    n_local_crops
-                ),
+                student_output_list=chunked_student_local_cls_tokens_after_head,
                 teacher_out_softmaxed_centered_list=teacher_dino_softmaxed_centered_list,
             ) / (n_global_crops_loss_terms + n_local_crops_loss_terms)
 
@@ -471,8 +502,9 @@ class SSLMetaArch(nn.Module):
             # accumulate loss
             loss_accumulator += self.dino_loss_weight * dino_global_crops_loss
 
-            student_cls_tokens = student_global_cls_tokens
-
+            student_cls_tokens = student_global_cls_tokens.squeeze()
+            # student_cls_tokens (b n_gc) d
+            # student_cls_tokens.chunk(2) = tuple (b d, b d)
             if self.do_koleo:
                 koleo_loss = self.cfg.dino.koleo_loss_weight * sum(
                     self.koleo_loss(p) for p in student_cls_tokens.chunk(2)

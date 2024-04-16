@@ -345,7 +345,7 @@ class DataAugmentationDINO(object):
             nb_seg = len(np.unique(resized_masks_int))
             # First, create a mask for each segment
             masks, patches_pos_list = [], []
-            for mask_idx in range(nb_seg):
+            for mask_idx in range(min(nb_seg, self.local_crops_number)):
                 matching_mask = resized_masks_int == mask_idx
                 if torch.numel(matching_mask > 0) > (
                     self.patch_size * self.patch_size * MIN_NB_PATCHES_IN_CROP
@@ -361,7 +361,7 @@ class DataAugmentationDINO(object):
             bboxes = masks_to_boxes(masks)  # (x1, y1, x2, y2)
 
             bounded_images, bounded_masks = [], []
-            for mask_idx in range(nb_seg):
+            for mask_idx in range(min(nb_seg, self.local_crops_number)):
                 mask = masks[mask_idx, :, :]
                 bbox = bboxes[mask_idx].to(torch.int32)
 

@@ -10,7 +10,9 @@ from . import vision_transformer as vits
 logger = logging.getLogger("dinov2")
 
 
-def build_model(args, only_teacher=False, img_size=224):
+def build_model(
+    args, only_teacher=False, img_size=224, free_shapes=None, num_loc_crops=8
+):
     args.arch = args.arch.removesuffix("_memeff")
     if "vit" in args.arch:
         vit_kwargs = dict(
@@ -25,6 +27,8 @@ def build_model(args, only_teacher=False, img_size=224):
             num_register_tokens=args.num_register_tokens,
             interpolate_offset=args.interpolate_offset,
             interpolate_antialias=args.interpolate_antialias,
+            free_shapes=free_shapes,
+            num_loc_crops=num_loc_crops,
         )
         teacher = vits.__dict__[args.arch](**vit_kwargs)
         if only_teacher:
@@ -40,5 +44,9 @@ def build_model(args, only_teacher=False, img_size=224):
 
 def build_model_from_cfg(cfg, only_teacher=False):
     return build_model(
-        cfg.student, only_teacher=only_teacher, img_size=cfg.crops.global_crops_size
+        cfg.student,
+        only_teacher=only_teacher,
+        img_size=cfg.crops.global_crops_size,
+        free_shapes=cfg.crops.free_shapes,
+        num_loc_crops=cfg.crops.local_crops_number,
     )

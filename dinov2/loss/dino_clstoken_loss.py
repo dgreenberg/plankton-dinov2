@@ -66,17 +66,12 @@ class DINOLoss(nn.Module):
         """
         Cross-entropy between softmax outputs of the teacher and student networks.
         len of input lists = Nb local and global crops
-        sizes = B D
+        sizes = B D for ALL
         """
-        """
-        print(
-            "loss ",
-            len(student_output_list),
-            [el.shape for el in student_output_list],
-            len(teacher_out_softmaxed_centered_list),
-            [el.shape for el in teacher_out_softmaxed_centered_list],
-        )
-        """
+        # print(
+        #    f"loss lc_stud {len(student_output_list)} {[el.shape for el in student_output_list]} \
+        #        gc_teach {len(teacher_out_softmaxed_centered_list)} {[el.shape for el in teacher_out_softmaxed_centered_list]}"
+        # )
         # TODO: Use cross_entropy_distribution here
         total_loss = 0
         for s in student_output_list:
