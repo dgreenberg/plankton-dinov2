@@ -44,16 +44,19 @@ class Attention(nn.Module):
         proj_bias: bool = True,
         attn_drop: float = 0.0,
         proj_drop: float = 0.0,
+        use_pytorch_attn: bool = False,
     ) -> None:
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
         self.scale = head_dim**-0.5
 
+        self.attn_drop_p = attn_drop
         self.qkv = nn.Linear(dim, dim * 3, bias=qkv_bias)
         self.attn_drop = nn.Dropout(attn_drop)
         self.proj = nn.Linear(dim, dim, bias=proj_bias)
         self.proj_drop = nn.Dropout(proj_drop)
+        self.use_pytorch_attn = use_pytorch_attn
 
     def forward(self, x: Tensor) -> Tensor:
         B, N, D = x.shape
@@ -63,15 +66,27 @@ class Attention(nn.Module):
             .permute(2, 0, 3, 1, 4)
         )  # 3 b h n d
         q, k, v = qkv[0] * self.scale, qkv[1], qkv[2]
-        attn = q @ k.transpose(-2, -1)
-        # b h n n
 
-        attn = attn.softmax(dim=-1)
-        attn = self.attn_drop(attn)
-        # b h n n
+        if (
+            self.use_pytorch_attn
+        ):  # TODO: implement attn mask AND args to use pytorch attn
+            x = torch.nn.functional.scaled_dot_product_attention(
+                q,
+                k,
+                v,
+                attn_mask=None,  # TODO: implement attn mask
+                dropout_p=self.attn_drop_p,
+            )
+        else:
+            attn = q @ k.transpose(-2, -1)
+            # b h n n
 
-        x = (attn @ v).transpose(1, 2).reshape(B, N, D)
-        x = self.proj(x)
+            attn = attn.softmax(dim=-1)
+            attn = self.attn_drop(attn)
+            # b h n n
+
+            x = (attn @ v).transpose(1, 2).reshape(B, N, D)
+            x = self.proj(x)
         x = self.proj_drop(x)
         # b n d
         return x

@@ -207,13 +207,23 @@ class DinoVisionTransformer(nn.Module):
 
     def init_weights(self):
         trunc_normal_(self.pos_embed, std=0.02)
-        self.ref_pos_embed = self.pos_embed.clone()
         nn.init.normal_(self.cls_token, std=1e-6)
         if self.register_tokens is not None:
             nn.init.normal_(self.register_tokens, std=1e-6)
         named_apply(init_weights_vit_timm, self)
 
     def interpolate_pos_encoding(self, x, w, h):
+        """
+        Interpolates the positional encoding of the given input tensor based on its shape and the provided width and height.
+
+        Args:
+            x (Tensor): The input tensor.
+            w (int): The width of the input tensor.
+            h (int): The height of the input tensor.
+
+        Returns:
+            Tensor: The interpolated positional encoding tensor.
+        """
         previous_dtype = x.dtype
         npatch = x.shape[1] - 1
         N = self.pos_embed.shape[1] - 1
@@ -256,48 +266,76 @@ class DinoVisionTransformer(nn.Module):
         Interpolates position encoding for local crops of an image.
 
         Args:
-            x: The input tensor.
-            crop_dims: A list of crop dimensions.
-            crop_nb_list: A list of crop numbers.
+            x: The input tensor. b n d
+            crop_dims: A list of crop dimensions. b [n_c, 2]
+            crop_nb_list: A list of crop numbers. b n_c [n_p]
 
         Returns:
             A tensor of interpolated position encodings.
         """
         previous_dtype = x.dtype
-        N_ref = self.ref_pos_embed.shape[1] - 1
-        ref_dim = self.ref_pos_embed.shape[-1]
-        x_dim = x.shape[-1]
+        N_ref = self.pos_embed.shape[1] - 1
+        dim = self.pos_embed.shape[-1]  # 384
+        max_nb_token = x.shape[1]
+        # print(f"max_nb_token = {max_nb_token}")
 
         M = int(math.sqrt(N_ref))  # Recover the number of patches in each dimension
         assert N_ref == M * M
-        print("x", x.shape, "ref", self.ref_pos_embed)
+        # x.shape = (b, n, d), pos_embed.shape = (1, n_ref, d)
 
-        ref_pos_embed = self.ref_pos_embed.float()
-        class_pos_embed = ref_pos_embed[:, : self.num_loc_crops]
-        ref_patch_pos_embed = ref_pos_embed[:, self.num_loc_crops :]
-        crop_pos_embed_list = []
-        for crop_dim, crop_nbs in zip(crop_dims, crop_nb_list):
-            w, h = crop_dim
-            w0 = w // self.patch_size
-            h0 = h // self.patch_size
+        pos_embed = self.pos_embed.float()
+        class_pos_embed = pos_embed[:, 0]
+        patch_pos_embed = pos_embed[:, 1:]
 
-            crop_pos_embed = nn.functional.interpolate(
-                ref_patch_pos_embed.reshape(1, w, h, ref_dim).permute(0, 3, 1, 2),
-                mode="bicubic",
-                antialias=self.interpolate_antialias,
-                size=(x_dim, w0, h0),
+        batch_embeds_list = []
+        for crops_dim, crops_nbs in zip(crop_dims, crop_nb_list):
+            crop_pos_embed_list = []
+            for single_dim, nbs in zip(crops_dim, crops_nbs):
+                w, h = int(single_dim[0]), int(single_dim[1])
+                w0 = w // self.patch_size
+                h0 = h // self.patch_size
+
+                crop_pos_embed = nn.functional.interpolate(
+                    patch_pos_embed.reshape(1, M, M, dim).permute(0, 3, 1, 2),
+                    mode="bicubic",
+                    antialias=self.interpolate_antialias,
+                    size=(w0, h0),
+                )
+                assert (w0, h0) == crop_pos_embed.shape[-2:]
+                crop_pos_embed = crop_pos_embed.permute(0, 2, 3, 1).view(
+                    -1, dim
+                )  # n_t dim
+                # keep only pos_embeds of selected patches
+                # print(f"nbs  {nbs.device} {nbs.dtype} {nbs[:10]}") # FIXME: sometimes dtype is float16?
+                crop_pos_embed = torch.index_select(
+                    crop_pos_embed,
+                    dim=0,
+                    index=nbs.long(),
+                )  # n_p_select d
+
+                crop_pos_embed_list.append(
+                    torch.cat([class_pos_embed, crop_pos_embed], dim=0)
+                )
+
+            # pad with zeros
+            all_crops_embed = torch.cat(crop_pos_embed_list, dim=0)
+            padding = torch.zeros(
+                (
+                    max_nb_token - all_crops_embed.shape[0],
+                    dim,
+                ),
+                dtype=all_crops_embed.dtype,
+                device=all_crops_embed.device,
             )
-            assert (w0, h0) == crop_pos_embed.shape[-2:]
-            crop_pos_embed = crop_pos_embed.permute(0, 2, 3, 1).view(1, -1, x_dim)
-            # keep only pos_embeds of selected patches
-            crop_pos_embed = torch.index_select(
-                torch.flatten(crop_pos_embed, start_dim=-2), dim=-1, index=crop_nbs
-            )
-            crop_pos_embed_list.append(crop_pos_embed)
 
-        return torch.cat(
-            ([class_pos_embed.unsqueeze(0)] + crop_pos_embed_list), dim=1
-        ).to(previous_dtype)
+            batch_embeds_list.append(
+                torch.cat([all_crops_embed, padding], dim=0)
+            )  # cat on tokens nb
+        return (
+            torch.stack(batch_embeds_list)
+            .to(torch.cuda.current_device())
+            .to(previous_dtype)
+        )
 
     def prepare_tokens_with_masks(
         self,
@@ -305,6 +343,7 @@ class DinoVisionTransformer(nn.Module):
         masks: Optional[torch.Tensor] = None,  # (b, w, h)
         local_patch_pos: Optional[List[List[int]]] = None,
         local_crop_dims: Optional[List[List[int]]] = None,
+        local_crop_len: List[torch.Tensor] = None,
     ) -> torch.Tensor:
         """Prepare tokens with positional embeddings and masks.
 
@@ -329,6 +368,7 @@ class DinoVisionTransformer(nn.Module):
         # b c w h OR b c p (n p)
         w, h = x.size(-2), x.size(-1)
         x = self.patch_embed(x)  # b n d (=384)
+        x_dim = x.shape[-1]
         if masks is not None:
             x = torch.where(
                 masks.unsqueeze(-1), self.mask_token.to(x.dtype).unsqueeze(0), x
@@ -337,30 +377,64 @@ class DinoVisionTransformer(nn.Module):
         if (
             self.free_shapes and local_patch_pos is not None
         ):  # if local crops w free shape
-            cls_token = torch.tile(self.cls_token, dims=(1, self.num_loc_crops, 1))
-        else:
-            cls_token = self.cls_token
-        x = torch.cat((cls_token.expand(x.shape[0], -1, -1), x), dim=1)
+            cls_token = torch.tile(
+                self.cls_token, dims=(x.shape[0], self.num_loc_crops, 1)
+            )  # (1 1 d) -> (b n_lc d)
+            x_list = []
+            local_crop_len = [
+                torch.cat([torch.zeros(1, device=el.device), el])
+                for el in local_crop_len
+            ]
+            max_nb_token = x.shape[1] + self.num_loc_crops  # (with cls tokens)
+            for i in range(x.shape[0]):  # b n d
+                single_x_list = []
+                for j in range(1, len(local_crop_len[i])):
+                    # print(
+                    #    f"i {i} j {j} {int(local_crop_len[i][:j].sum())} {int(local_crop_len[i][:j + 1].sum())} {local_crop_len[i][:j+1]} {len(local_crop_len[i])}"
+                    # add padding here to even up x, or make x a nested tensor
+                    single_x_list.append(
+                        torch.cat(
+                            (
+                                cls_token[i, j - 1, :][None, None, :],
+                                x[
+                                    i,
+                                    int(local_crop_len[i][:j].sum()) : int(
+                                        local_crop_len[i][: j + 1].sum()
+                                    ),
+                                    :,
+                                ][None, :],
+                            ),
+                            dim=1,
+                        )
+                    )
+                cat_x = torch.cat(single_x_list, dim=1)
+                padding = torch.zeros(
+                    (1, max_nb_token - cat_x.shape[1], x_dim),
+                    device=cat_x.device,
+                    dtype=cat_x.dtype,
+                )
+                cat_x = torch.cat([cat_x, padding], dim=1)
+                x_list.append(cat_x)
+            # x = torch.nested.nested_tensor(x_list)  # local_patch_pos b n d
+            x = torch.cat(x_list, dim=0)  # local_patch_pos b n d
 
-        if self.free_shapes and local_patch_pos is not None:
             interpolated_pos_embeds = self.interpolate_pos_encoding_lc_navit(
                 x,
                 crop_dims=local_crop_dims,
                 crop_nb_list=local_patch_pos,
             )
+
         else:
+            x = torch.cat((self.cls_token.expand(x.shape[0], -1, -1), x), dim=1)
             interpolated_pos_embeds = self.interpolate_pos_encoding(x, w, h)
 
         x = x + interpolated_pos_embeds
-
         if self.register_tokens is not None:
             x = torch.cat(
                 (
-                    x[
-                        :, : self.cls_token.shape[1]
-                    ],  # TODO: rework this to put at correct position
+                    x[:, 0],
                     self.register_tokens.expand(x.shape[0], -1, -1),
-                    x[:, self.cls_token.shape[1] :],
+                    x[:, 1:],
                 ),
                 dim=1,
             )
@@ -396,9 +470,10 @@ class DinoVisionTransformer(nn.Module):
                     masks,
                     local_patch_pos=patch_pos,
                     local_crop_dims=crop_dims,
+                    local_crop_len=crop_len,
                 )
-                for x, masks, patch_pos, crop_dims in zip(
-                    x_list, masks_list, local_patch_pos, local_crop_dims
+                for x, masks, patch_pos, crop_dims, crop_len in zip(
+                    x_list, masks_list, local_patch_pos, local_crop_dims, local_crop_len
                 )
             ]
         else:

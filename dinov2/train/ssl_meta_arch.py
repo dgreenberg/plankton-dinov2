@@ -188,6 +188,11 @@ class SSLMetaArch(nn.Module):
 
             local_crop_len = images["local_crop_len"].cuda(non_blocking=True)
             local_patch_pos = images["local_patch_pos"]
+            if exists(local_patch_pos) and isinstance(local_patch_pos, list):
+                for el in local_patch_pos:
+                    for el2 in el:
+                        el2 = el2.cuda(non_blocking=True)
+
             local_crop_dims = images["local_crop_dims"].cuda(non_blocking=True)
         else:
             global_crops = images["collated_global_crops"]

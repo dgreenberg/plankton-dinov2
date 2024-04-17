@@ -22,7 +22,7 @@ logger = logging.getLogger("dinov2")
 
 def exists(val):
     if isinstance(val, list):
-        return all([exists(el) for el in val])
+        return any([exists(el) for el in val])
     return val is not None
 
 

@@ -28,7 +28,7 @@ from .transforms import (
 )
 
 logger = logging.getLogger("dinov2")
-MAX_PATCHES = 900
+MAX_PATCHES = 1000
 MIN_NB_PATCHES_IN_CROP = 10
 BASE_LC_NB = 8
 PATCH_THRESHOLD = 1e-5
@@ -303,7 +303,8 @@ class DataAugmentationDINO(object):
                 image.permute((1, 2, 0)), scale=300, sigma=0.5, min_size=1000
             )
         elif seg_algo == SegmentationAlgo.SLIC.value:
-            n_segments = max(int((h * w) / (STD_CROP_SIZE * STD_CROP_SIZE)), 3)
+            # n_segments = max(int((h * w) / (STD_CROP_SIZE * STD_CROP_SIZE)), 3)
+            n_segments = self.local_crops_number
             segments = slic(
                 image.permute((1, 2, 0)),
                 n_segments=n_segments,
@@ -413,6 +414,22 @@ class DataAugmentationDINO(object):
         )
         return patches
 
+    def make_std_params(self):
+        patch_nb_per_crop = (self.local_crops_size * self.local_crops_size) / (
+            self.patch_size * self.patch_size
+        )
+        crop_len = (
+            torch.ones(self.local_crops_number, dtype=torch.long) * patch_nb_per_crop
+        )
+        filtered_patch_pos_list = torch.tile(
+            torch.arange(patch_nb_per_crop), (self.local_crops_number, 1)
+        )
+        filtered_bboxes = torch.tile(
+            torch.tensor([0, 0, self.local_crops_size, self.local_crops_size]),
+            (self.local_crops_number, 1),
+        )
+        return crop_len, filtered_patch_pos_list, filtered_bboxes
+
     def select_and_concat_nonzero_patches(
         self,
         local_crops,
@@ -452,12 +469,16 @@ class DataAugmentationDINO(object):
                             self.crop_to_patches(
                                 self.local_transfo(self.std_augmentation_local(image))
                             ).squeeze()  # c (n p) p
-                            for _ in range(BASE_LC_NB)  # 8 is std local crops nb
+                            for _ in range(
+                                self.local_crops_number
+                            )  # 8 is std local crops nb
                         ]
-                        return torch.cat(local_crop, dim=1)  # c (n_c p) p
+                        return torch.cat(local_crop, dim=1)  # c (n p) p
 
                     flat_patches = std_patching(image)
-
+                    crop_len, filtered_patch_pos_list, filtered_bboxes = (
+                        self.make_std_params()
+                    )
                     break
                 else:
                     # otherwise, we collected enough patches and exit the loop
@@ -481,7 +502,9 @@ class DataAugmentationDINO(object):
             crop_len_list.append(curr_nb_patches)
             selected_patches = torch.cat(selected_patches, dim=1)  # c (n_p p) p
             list_flat_patches.append(selected_patches)
-            filtered_patch_pos_list.append(selected_patch_pos)
+            filtered_patch_pos_list.append(
+                torch.tensor(selected_patch_pos, dtype=torch.long)
+            )
             filtered_bboxes.append(bbox)
 
         # list_flat_patches n_crop (c (n_p p) p)
@@ -490,14 +513,12 @@ class DataAugmentationDINO(object):
                 f"tot_patches: {tot_patches}, len: {len(crop_len_list)}, {crop_len_list}"
             )
             flat_patches = std_patching(image)
-            crop_len_list = BASE_LC_NB * [STD_CROP_SIZE]
-            filtered_bboxes = None
+            crop_len, filtered_patch_pos_list, filtered_bboxes = self.make_std_params()
         else:
             flat_patches = torch.cat(list_flat_patches, dim=1)  # c (n_crop n_p p) p
             filtered_bboxes = torch.stack(filtered_bboxes)
+            crop_len = torch.tensor(crop_len_list)
 
-        crop_len = torch.Tensor(crop_len_list)
-        # print("crop_len", crop_len, np.sum(crop_len))
         if tot_patches > MAX_PATCHES:
             print(
                 f"WARNING: flat_patches too big dim: ({flat_patches.shape[1]}), {int(flat_patches.shape[1]/self.patch_size)} local crops tokens",
@@ -576,18 +597,14 @@ class DataAugmentationDINO(object):
             output["local_crops"] = local_crops
             output["local_crop_len"] = local_crop_len
             output["local_patch_pos"] = filtered_patch_pos_list
-            if exists(filtered_bboxes):
-                crop_dims = torch.cat(
-                    [
-                        filtered_bboxes[:, 1:2] - filtered_bboxes[:, :0],
-                        filtered_bboxes[:, 2:3] - filtered_bboxes[:, 0:1],
-                    ],
-                    dim=1,
-                )  # N 2
-            else:
-                crop_dims = torch.tile(
-                    torch.Tensor(1, STD_CROP_SIZE, STD_CROP_SIZE), (8, 1, 1)
-                )
+            # (x1, y1, x2, y2)
+            crop_dims = torch.cat(
+                [
+                    filtered_bboxes[:, 2:3] - filtered_bboxes[:, :1] + 1,
+                    filtered_bboxes[:, 3:] - filtered_bboxes[:, 1:2] + 1,
+                ],
+                dim=1,
+            )  # n_c 2
             output["local_crop_dims"] = crop_dims
         else:
             local_crops = [
