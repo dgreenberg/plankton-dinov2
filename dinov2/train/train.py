@@ -12,7 +12,6 @@ import sys
 from enum import Enum
 from functools import partial
 
-import numpy as np
 import torch
 import torchvision
 import wandb
@@ -411,6 +410,9 @@ def do_train(cfg, model, resume=False):
 
         if math.isnan(sum(loss_dict_reduced.values())):
             logger.info("NaN detected")
+            for k, v in loss_dict_reduced.items():
+                if math.isnan(v):
+                    print("Key:{} is nan. Stopping...".format(k))
             raise AssertionError
         losses_reduced = sum(loss for loss in loss_dict_reduced.values())
 

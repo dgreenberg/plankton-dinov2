@@ -175,14 +175,22 @@ def load_pretrained_weights(
         )
 
     # shape loaded state_dict like model state_dict
-    state_dict = {
-        k_c: (
-            v_c.reshape(model.state_dict()[k_c].shape)
-            if k_c in model.state_dict().keys()
-            else v_c
-        )
-        for k_c, v_c in state_dict.items()
-    }
+    try:
+        state_dict = {
+            k_c: (
+                v_c.reshape(model.state_dict()[k_c].shape)
+                if k_c in model.state_dict().keys()
+                and v_c.shape != model.state_dict()[k_c].shape
+                else v_c
+            )
+            for k_c, v_c in state_dict.items()
+        }
+    except Exception as e:
+        print(f"{[(k_c, v_c) for k_c, v_c in state_dict.items()]}")
+        print(f"{[(k_c, v_c) for k_c, v_c in model.state_dict().items()]}")
+        print(e)
+        sys.exit(1)
+
     msg = model.load_state_dict(state_dict, strict=False)
     logger.info(
         "Pretrained weights found at {} and loaded with msg: {}".format(
@@ -264,6 +272,6 @@ def has_batchnorms(model):
 
 
 def none_or_str(value):
-    if value.lower() == "none":
+    if value.strip().lower() == "none":
         return None
     return value

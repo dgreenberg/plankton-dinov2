@@ -34,8 +34,11 @@ class LMDBDataset(ImageNet):
             return None
         else:
             entries = self._get_entries()
-            class_index = entries[index]["class_id"]
-            return int(class_index)
+            if self.with_targets:
+                class_index = entries[index]["class_id"]
+                return int(class_index)
+            else:
+                return None
 
     def get_class_ids(self) -> np.ndarray:
         self._get_entries()
@@ -100,7 +103,7 @@ class LMDBDataset(ImageNet):
                 meminit=False,
             )
             # ex: "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
-            # print("lmdb_env_imgs.stat()", lmdb_env_imgs.stat())
+            print("lmdb_env_imgs.stat()", lmdb_env_imgs.stat())
 
             lmdb_txn_labels = lmdb_env_labels.begin()
             lmdb_txn_imgs = lmdb_env_imgs.begin()
@@ -111,7 +114,9 @@ class LMDBDataset(ImageNet):
             for key, value in lmdb_cursor:
                 entry = dict()
                 entry["index"] = int(key.decode())
-                entry["class_id"] = int(value.decode())
+                if self.with_targets:
+                    entry["class_id"] = int(value.decode())
+
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
 
                 accumulated.append(entry)
@@ -123,11 +128,12 @@ class LMDBDataset(ImageNet):
             lmdb_cursor.close()
             lmdb_env_labels.close()
 
-        class_ids = [el["class_id"] for el in accumulated]
-        print(f"#unique_class_ids: {self._split}, {len(set(class_ids))}")
+        if self.with_targets:
+            class_ids = [el["class_id"] for el in accumulated]
+            print(f"#unique_class_ids: {self._split}, {len(set(class_ids))}")
+            self._class_ids = class_ids
 
         self._entries = accumulated
-        self._class_ids = class_ids
 
     def __len__(self) -> int:
         entries = self._get_entries()

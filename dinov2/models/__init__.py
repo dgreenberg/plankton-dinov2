@@ -5,6 +5,8 @@
 
 import logging
 
+from dinov2.utils.utils import exists, none_or_str
+
 from . import vision_transformer as vits
 
 logger = logging.getLogger("dinov2")
@@ -47,6 +49,6 @@ def build_model_from_cfg(cfg, only_teacher=False):
         cfg.student,
         only_teacher=only_teacher,
         img_size=cfg.crops.global_crops_size,
-        free_shapes=cfg.crops.free_shapes,
+        free_shapes=none_or_str(cfg.crops.free_shapes),
         num_loc_crops=cfg.crops.local_crops_number,
     )

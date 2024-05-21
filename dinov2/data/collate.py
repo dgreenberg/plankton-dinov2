@@ -25,24 +25,32 @@ def collate_data_and_cast(
     # from b (nb_crops c h w) OR b (nb_crops c p nxp) to (b nc) c p np
     # nb crops goes with batch size ie: b nc -> (b nc)
     if isinstance(samples, dict):
-        B, nc, c, h, w = samples["global_crops"].size()
-        coll_global_crops = rearrange(
-            samples["global_crops"],
-            "b nc c h w -> (b nc) c h w",
-            c=c,
-            b=B,
-        )
-        coll_local_crops = rearrange(
-            samples["local_crops"],
-            "b nc c h w -> (b nc) c h w",
-            c=c,
-            b=B,
-        )
-        B = nc * B  # we define a new pseudo batch size
-
-        local_crop_len = samples["local_crop_len"]
-        local_patch_pos = samples["local_patch_pos"]
-        local_crop_dims = samples["local_crop_dims"]
+        if len(samples["global_crops"].size()) == 5:
+            B, nc, c, h, w = samples["global_crops"].size()
+            coll_global_crops = rearrange(
+                samples["global_crops"],
+                "b nc c h w -> (b nc) c h w",
+                c=c,
+                b=B,
+            )
+            coll_local_crops = rearrange(
+                samples["local_crops"],
+                "b nc c h w -> (b nc) c h w",
+                c=c,
+                b=B,
+            )
+            B = nc * B  # we define a new pseudo batch size
+            local_crop_len = samples["local_crop_len"]
+            local_patch_pos = samples["local_patch_pos"]
+            local_crop_dims = samples["local_crop_dims"]
+        else:  # no free shapes
+            B, c, h, w = samples["global_crops"].size()
+            coll_global_crops = samples["global_crops"]
+            coll_local_crops = samples["local_crops"]
+            # Local shape torch.Size([256, 3, 98, 98]) Global shape  torch.Size([64, 3, 3584, 14])
+            local_crop_len = None
+            local_patch_pos = None
+            local_crop_dims = None
 
     elif isinstance(samples[0], dict):  # on gpu and with free_shapes
         nc, c, h, w = samples[0]["global_crops"].size()

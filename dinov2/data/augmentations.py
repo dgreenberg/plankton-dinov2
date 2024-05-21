@@ -436,7 +436,6 @@ class DataAugmentationDINO(object):
         masks,
         image,
         nb_gc_patches=0,
-        local_patch_pos_list=None,
         bboxes=None,
         do_drop_patches=False,
     ):
@@ -447,9 +446,7 @@ class DataAugmentationDINO(object):
         tot_patches = nb_gc_patches
         list_flat_patches, crop_len_list = [], []
         filtered_patch_pos_list, filtered_bboxes = [], []
-        for crop, mask, local_patch_pos, bbox in zip(
-            local_crops, masks, local_patch_pos_list, bboxes
-        ):
+        for crop, mask, bbox in zip(local_crops, masks, bboxes):
             mask_patches = self.crop_to_patches(mask).squeeze()  # c (n p) p
             img_patches = self.crop_to_patches(crop).squeeze()  # c (n p) p
             mask_patches = torch.chunk(
@@ -547,6 +544,7 @@ class DataAugmentationDINO(object):
         im2_base = self.geometric_augmentation_global(image_global)
         global_crop_2 = self.global_transfo2(im2_base)
 
+        output["global_crops_vis"] = [global_crop_1, global_crop_2]
         global_crops = torch.cat(
             [self.crop_to_patches(global_crop_1), self.crop_to_patches(global_crop_2)],
             dim=0,
@@ -580,6 +578,9 @@ class DataAugmentationDINO(object):
             ]
             # crops to list of patches, masked p are dropped
 
+            output["local_crops_vis"] = (
+                local_crops  # before patching, for visualization
+            )
             (
                 local_crops,
                 local_crop_len,
@@ -590,10 +591,8 @@ class DataAugmentationDINO(object):
                 masks,
                 image=image,
                 nb_gc_patches=nb_gc_patches,
-                local_patch_pos_list=local_patch_pos_list,
                 bboxes=bboxes,
             )
-            # output["local_crops_vis"] = fragments  # for visualization
             output["local_crops"] = local_crops
             output["local_crop_len"] = local_crop_len
             output["local_patch_pos"] = filtered_patch_pos_list

@@ -20,7 +20,12 @@ from dinov2.loss import DINOLoss, KoLeoLoss, iBOTPatchLoss
 from dinov2.models import build_model_from_cfg
 from dinov2.models.vision_transformer import BlockChunk
 from dinov2.utils.param_groups import fuse_params_groups, get_params_groups_with_decay
-from dinov2.utils.utils import exists, has_batchnorms, load_pretrained_weights
+from dinov2.utils.utils import (
+    exists,
+    has_batchnorms,
+    load_pretrained_weights,
+    none_or_str,
+)
 
 try:
     from xformers.ops import fmha
@@ -171,7 +176,7 @@ class SSLMetaArch(nn.Module):
     def forward_backward(self, images, teacher_temp):
         n_global_crops = 2
         n_local_crops = self.cfg.crops.local_crops_number
-        do_free_shapes = self.cfg.crops.free_shapes
+        do_free_shapes = none_or_str(self.cfg.crops.free_shapes)
 
         attn_mask_gc = attn_mask_gc = None
         if not images["collated_global_crops"].is_cuda:
@@ -434,15 +439,13 @@ class SSLMetaArch(nn.Module):
         student_head_output = self.student.dino_head(cat_inputs)
         # student_head_output (1 2592 4096)
         outputs_list = _attn_bias.split(student_head_output)
-        # print(
-        #    f"lc_out_list: {len(outputs_list)}, {[out.shape for out in outputs_list]}"
-        # )
         # lc_out_list: len=3, [torch.Size([1, 32, 4096]), torch.Size([1, 64, 4096]), torch.Size([1, 2496, 4096])]
 
         # 3a: local crops cls tokens
         if do_free_shapes:
             student_local_cls_tokens_after_head = []
             for i in range(n_local_crops):
+                print("cc", i, "/", n_local_crops)
                 student_local_cls_tokens_after_head.append(
                     outputs_list.pop(0).squeeze()
                 )
