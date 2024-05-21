@@ -272,6 +272,6 @@ def has_batchnorms(model):
 
 
 def none_or_str(value):
-    if value.strip().lower() == "none":
+    if isinstance(value, str) and value.strip().lower() == "none":
         return None
     return value
