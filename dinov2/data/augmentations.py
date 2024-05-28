@@ -377,6 +377,17 @@ class DataAugmentationDINO(object):
         return seg_to_patched_seg(segments, image[0, :, :])
 
     def pad_to_patch_mutiple(self, image):
+        """
+        Pads the input image to a multiple of the patch size.
+        Args:
+            image (torch.Tensor): The input image to be padded. C H W or H W
+        Returns:
+            torch.Tensor: The padded image.
+        Note:
+            This function calculates the padding required for the image to be a multiple of the patch size.
+            It then pads the image using the `torch.nn.functional.pad` function with the calculated padding values.
+            The padding mode is set to "replicate".
+        """
         # Can also make a version that pads down
         pad_y = self.patch_size - image.shape[-1] % self.patch_size
         pad_x = self.patch_size - image.shape[-2] % self.patch_size

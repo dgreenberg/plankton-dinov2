@@ -21,6 +21,7 @@ from dinov2.layers import (
     MemEffAttention,
     Mlp,
     PatchEmbed,
+    PatchEmbedPerChannel,
     SwiGLUFFNFused,
 )
 from dinov2.layers import (
@@ -124,6 +125,10 @@ class DinoVisionTransformer(nn.Module):
         self.interpolate_offset = interpolate_offset
         self.img_size = img_size
 
+        if in_chans > 3:
+            embed_layer = PatchEmbedPerChannel
+        else:
+            embed_layer = PatchEmbed
         self.patch_embed = embed_layer(
             img_size=img_size,
             patch_size=patch_size,

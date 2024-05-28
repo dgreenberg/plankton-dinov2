@@ -1,10 +1,11 @@
 import glob
 import os
+import sys
 from enum import Enum
-from typing import Optional
+from typing import Any, Optional, Tuple, Union
 
-import lmdb
 import numpy as np
+import torch
 
 from dinov2.data.datasets import ImageNet
 
@@ -18,7 +19,7 @@ class _SplitLMDBDataset(Enum):
     ALL = "all"
 
 
-class LMDBDataset(ImageNet):
+class NPYDataset(ImageNet):
     Target = _TargetLMDBDataset
     Split = _SplitLMDBDataset
     lmdb_handles = {}
@@ -40,9 +41,9 @@ class LMDBDataset(ImageNet):
         if self.root.endswith("TRAIN") or self.root.endswith(
             "VAL"
         ):  # if we have a single file
-            return self.root + "_*"
+            return self.root
         elif self._split.value.upper() == "ALL":
-            return os.path.join(self.root, "*")
+            return self.root
         else:
             return os.path.join(self.root, f"*-{self._split.value.upper()}_*")
 
@@ -50,7 +51,7 @@ class LMDBDataset(ImageNet):
         if not os.path.isdir(self.root):
             return extra_path
         else:
-            return os.path.join(self.root, "*")
+            return self.root
 
     def _get_entries(self) -> list:
         if self._entries is None:
@@ -67,8 +68,8 @@ class LMDBDataset(ImageNet):
         mask_path = os.path.join(extra_path, "fold*", "masks", "fold*", "masks.npy")
         file_list_labels = sorted(glob.glob(mask_path))
 
-        mask_path = os.path.join(extra_path, "fold*", "masks", "fold*", "masks.npy")
-        file_list_imgs = sorted(glob.glob(mask_path))
+        image_path = os.path.join(extra_path, "fold*", "images", "fold*", "images.npy")
+        file_list_imgs = sorted(glob.glob(image_path))
 
         print(f"Datasets labels file list: {file_list_labels}")
         print(f"Datasets imgs file list: {file_list_imgs}")
@@ -78,8 +79,9 @@ class LMDBDataset(ImageNet):
             file_list_labels = file_list_labels[:1]
             file_list_imgs = file_list_imgs[:1]
 
-        for image, mask in zip(file_list_imgs, file_list_labels):
-            accumulated.append({"mask": mask, "image": image})
+        for image_file, mask_file in zip(file_list_imgs, file_list_labels):
+            for image, mask in zip(np.load(image_file), np.load(mask_file)):
+                accumulated.append({"mask": mask, "image": image})
 
         self._entries = accumulated
 
@@ -90,3 +92,15 @@ class LMDBDataset(ImageNet):
     def close(self):
         for handle in self.lmdb_handles.values():
             handle.close()
+
+    def __getitem__(self, index: int) -> Union[Tuple[Any, Any], torch.Tensor]:
+        img = self.get_image_data(index).transpose((2, 0, 1))
+
+        image = torch.from_numpy(img / 255.0).to(torch.float32)
+
+        mask = self.get_target(index)
+
+        if self.transforms is not None:
+            image, target = self.transforms(image, mask)
+
+        return image, target
