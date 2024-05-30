@@ -80,7 +80,10 @@ class NPYDataset(ImageNet):
             file_list_imgs = file_list_imgs[:1]
 
         for image_file, mask_file in zip(file_list_imgs, file_list_labels):
-            for image, mask in zip(np.load(image_file), np.load(mask_file)):
+            images_array = np.load(image_file)
+            masks_array = np.load(mask_file)
+            print(f"imgs shape: {images_array.shape}, masks shape: {masks_array.shape}")
+            for image, mask in zip(images_array, masks_array):
                 accumulated.append({"mask": mask, "image": image})
 
         self._entries = accumulated

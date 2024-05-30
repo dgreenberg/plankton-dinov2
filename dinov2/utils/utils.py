@@ -83,11 +83,8 @@ def match_pos_embeds(
             end=" ",
         )
         print(
-            "pos_embed_ref: ",
-            pos_embeds_ref.shape,  #  torch.Size([1, 257, 768])
-            " pos_embed_loaded: ",
-            pos_embeds_loaded.shape,
-        )
+            f"pos_embed_ref: {pos_embeds_ref.shape}, pos_embed_loaded: {pos_embeds_loaded.shape}"
+        )  #  torch.Size([1, 257, 768])
         pos_embeds_loaded = resize_pos_embed(
             pos_embeds_loaded,
             input_shape=img_shape,
@@ -186,9 +183,9 @@ def load_pretrained_weights(
             for k_c, v_c in state_dict.items()
         }
     except Exception as e:
-        print(f"{[(k_c, v_c) for k_c, v_c in state_dict.items()]}")
-        print(f"{[(k_c, v_c) for k_c, v_c in model.state_dict().items()]}")
-        print(e)
+        print(f"Error: {e}")
+        print(f"{[(k_c, v_c.shape) for k_c, v_c in state_dict.items()]}")
+        print(f"{[(k_c, v_c.shape) for k_c, v_c in model.state_dict().items()]}")
         sys.exit(1)
 
     msg = model.load_state_dict(state_dict, strict=False)
