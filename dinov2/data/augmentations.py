@@ -296,8 +296,6 @@ class DataAugmentationDINO(object):
 
     def make_seg_crops(self, image, seg_algo):
         # image : C H W
-
-        c, h, w = image.shape
         if seg_algo == SegmentationAlgo.FELZENSWALB.value:
             segments = felzenszwalb(
                 image.permute((1, 2, 0)), scale=300, sigma=0.5, min_size=1000
@@ -309,7 +307,7 @@ class DataAugmentationDINO(object):
                 image.permute((1, 2, 0)),
                 n_segments=n_segments,
                 compactness=10,
-                sigma=1.0,
+                sigma=0,
                 start_label=1,
             )
         else:
@@ -372,7 +370,13 @@ class DataAugmentationDINO(object):
                 bounded_images.append(bounded_image)
                 bounded_masks.append(bounded_mask)
 
-            return bounded_images, bounded_masks, bboxes, patches_pos_list
+            return (
+                bounded_images,
+                bounded_masks,
+                bboxes,
+                patches_pos_list,
+                resized_masks_int,
+            )
 
         return seg_to_patched_seg(segments, image[0, :, :])
 
@@ -565,11 +569,12 @@ class DataAugmentationDINO(object):
 
         # local crops:
         if self.do_seg_crops:
-            local_crops, masks, bboxes, local_patch_pos_list = self.make_seg_crops(
-                image, seg_algo=self.do_seg_crops
+            local_crops, masks, bboxes, local_patch_pos_list, resized_masks_int = (
+                self.make_seg_crops(image, seg_algo=self.do_seg_crops)
             )
             # masks = [mask[None, :, :].repeat((3, 1, 1)) for mask in masks]
 
+            output["pooled_seg"] = resized_masks_int
             # Augment crops and masks
             local_crops, masks = list(
                 zip(

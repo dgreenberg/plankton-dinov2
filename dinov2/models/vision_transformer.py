@@ -125,7 +125,7 @@ class DinoVisionTransformer(nn.Module):
         self.interpolate_offset = interpolate_offset
         self.img_size = img_size
 
-        if in_chans > 3:
+        if in_chans >= 3:
             print(f"---- Using PatchEmbedPerChannel, with {in_chans} channels ----")
             embed_layer = PatchEmbedPerChannel
         else:

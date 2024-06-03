@@ -83,6 +83,7 @@ class PatchEmbed(nn.Module):
         x = self.norm(x)
         if not self.flatten_embedding:
             x = x.reshape(-1, H, W, self.embed_dim)  # B H W D
+
         return x
 
     def flops(self) -> float:

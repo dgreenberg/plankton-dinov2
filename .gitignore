@@ -21,6 +21,8 @@ notebooks/dataloader_benchmark_results_10000_gpuTrue/time_vs_num_workers_worksta
 
 *.csv
 *.png
+*.jpg
+
 logs/log.txt
 logs/*.txt
 logs/
@@ -33,3 +35,5 @@ notebooks/seg_examples_Felzenschwalb.jpg
 notebooks/seg_examples_Quickshift.jpg
 notebooks/seg_examples_SLIC.jpg
 notebooks/segmentations.jpg
+notebooks/plots
+

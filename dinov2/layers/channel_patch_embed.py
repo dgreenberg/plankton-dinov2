@@ -1,12 +1,22 @@
 from typing import Callable, Optional, Tuple, Union
 
+import numpy as np
 import torch
 import torch.nn as nn
 from torch.nn.init import trunc_normal_
 
 
 class PatchEmbedPerChannel(nn.Module):
-    """Image to Patch Embedding."""
+    """
+    2D image to channel patch embedding: (B,C,H,W) -> (B,N,D)
+
+    Args:
+        img_size: Image size.
+        patch_size: Patch token size.
+        in_chans: Number of input image channels.
+        embed_dim: Number of linear projection output channels.
+        norm_layer: Normalization layer.
+    """
 
     def __init__(
         self,
@@ -35,13 +45,28 @@ class PatchEmbedPerChannel(nn.Module):
         trunc_normal_(self.channel_embed, std=0.02)
 
     def forward(self, x, extra_tokens={}):
+        """
+        Forward pass of the ChannelPatchEmbed module.
+
+        Args:
+            x (torch.Tensor): Input tensor of shape (B, Cin, H, W).
+            extra_tokens (dict, optional): Extra tokens dictionary. Defaults to {}.
+
+        Returns:
+            torch.Tensor: Output tensor of shape (B, CinHW, Cout).
+
+        Notes:
+            - The current number of channels (Cin) can be smaller or equal to in_chans.
+            - The shared projection layer is applied across channels.
+            - Channel specific offsets are added to the projection.
+            - The output sequence is prepared by flattening and transposing the tensor.
+        """
         # assume all images in the same batch has the same input channels
         if "channels" in extra_tokens.keys():
             cur_channels = extra_tokens["channels"][0]
         else:
-            cur_channels = self.in_chans
+            cur_channels = np.arange(self.in_chans)  # list of channels to select
 
-        B, Cin, H, W = x.shape
         # Note: The current number of channels (Cin) can be smaller or equal to in_chans
 
         # shared projection layer across channels
