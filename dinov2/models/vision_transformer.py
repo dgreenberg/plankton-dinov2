@@ -84,6 +84,7 @@ class DinoVisionTransformer(nn.Module):
         interpolate_offset=0.1,
         free_shapes=None,
         num_loc_crops=8,
+        use_ch_patch_embed=False,
     ):
         """
         Args:
@@ -124,8 +125,10 @@ class DinoVisionTransformer(nn.Module):
         self.interpolate_antialias = interpolate_antialias
         self.interpolate_offset = interpolate_offset
         self.img_size = img_size
+        self.in_chans = in_chans
 
-        if in_chans >= 3:
+        self.use_ch_patch_embed = use_ch_patch_embed
+        if self.use_ch_patch_embed:
             print(f"---- Using PatchEmbedPerChannel, with {in_chans} channels ----")
             embed_layer = PatchEmbedPerChannel
         else:
@@ -137,6 +140,8 @@ class DinoVisionTransformer(nn.Module):
             embed_dim=embed_dim,
         )
         num_patches = self.patch_embed.num_patches
+        if self.use_ch_patch_embed:
+            num_patches = int(num_patches / in_chans)
         self.num_loc_crops = num_loc_crops
         self.free_shapes = free_shapes
 
@@ -263,6 +268,11 @@ class DinoVisionTransformer(nn.Module):
 
         assert (w0, h0) == patch_pos_embed.shape[-2:]
         patch_pos_embed = patch_pos_embed.permute(0, 2, 3, 1).view(1, -1, dim)
+
+        if self.use_ch_patch_embed:
+            patch_pos_embed = patch_pos_embed.expand(1, self.in_chans, -1, dim).reshape(
+                1, -1, dim
+            )
         return torch.cat((class_pos_embed.unsqueeze(0), patch_pos_embed), dim=1).to(
             previous_dtype
         )
@@ -345,8 +355,8 @@ class DinoVisionTransformer(nn.Module):
 
     def prepare_tokens_with_masks(
         self,
-        x: torch.Tensor,  # (b, c, w, h)
-        masks: Optional[torch.Tensor] = None,  # (b, w, h)
+        x: torch.Tensor,  # (b n d)
+        masks: Optional[torch.Tensor] = None,  # (b d)
         local_patch_pos: Optional[List[List[int]]] = None,
         local_crop_dims: Optional[List[List[int]]] = None,
         local_crop_len: List[torch.Tensor] = None,
@@ -375,6 +385,7 @@ class DinoVisionTransformer(nn.Module):
         w, h = x.size(-2), x.size(-1)
         x = self.patch_embed(x)  # b n d (=384)
         x_dim = x.shape[-1]
+
         if masks is not None:
             x = torch.where(
                 masks.unsqueeze(-1), self.mask_token.to(x.dtype).unsqueeze(0), x

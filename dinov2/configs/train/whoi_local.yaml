@@ -72,6 +72,7 @@ train:
   augmentations: "kornia_gpu"
   use_torch_compile: false
   do_profiling: false
+  use_ch_patch_embed: false
 student:
   arch: vit_small
   patch_size: 14

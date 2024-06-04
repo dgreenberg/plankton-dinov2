@@ -19,6 +19,7 @@ def collate_data_and_cast(
     mask_generator=None,
     free_shapes=None,
     patch_size=14,
+    use_ch_patch_embed=False,
 ):
     attn_mask_lc = attn_mask_gc = None
     # samples dict_keys(['global_crops', 'global_crops_teacher', 'local_crops', 'offsets'])
@@ -97,6 +98,7 @@ def collate_data_and_cast(
         n_global_crops = len(samples[0][0]["global_crops"])
         n_local_crops = len(samples[0][0]["local_crops"])
 
+        n_gc, c, np, p = samples[0][0]["global_crops"].shape
         coll_global_crops = [
             s[0]["global_crops"][i] for i in range(n_global_crops) for s in samples
         ]
@@ -170,7 +172,12 @@ def collate_data_and_cast(
             masks_list
         )  # not possible if global crops of diff sizes in batch
 
-    collated_masks = torch.stack(masks_list).flatten(1)
+    # masks are dim: (gc_size // patch_size) ** 2, usually: (16 16)
+    collated_masks = torch.stack(masks_list).flatten(
+        1
+    )  # ((b nc) 16 16) -> ((b nc) 256)
+    if use_ch_patch_embed:
+        collated_masks = collated_masks.tile((1, c))  # ((b nc) 256) -> ((b nc) (c 256))
     mask_indices_list = collated_masks.flatten().nonzero().flatten()
 
     masks_weight = (

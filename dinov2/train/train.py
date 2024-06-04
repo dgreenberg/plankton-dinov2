@@ -14,11 +14,11 @@ from functools import partial
 
 import torch
 import torchvision
-import wandb
 from fvcore.common.checkpoint import PeriodicCheckpointer
 from torch.profiler import ProfilerActivity
 
 import dinov2.distributed as distributed
+import wandb
 from dinov2.data import (
     DataAugmentationDINO,
     MaskingGenerator,
@@ -148,6 +148,7 @@ def select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype):
             mask_generator=mask_generator,
             dtype=inputs_dtype,
             free_shapes=none_or_str(cfg.crops.free_shapes),
+            use_ch_patch_embed=cfg.train.use_ch_patch_embed,
         )
         collate_fn_gpu = None
     else:
@@ -160,6 +161,7 @@ def select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype):
             mask_generator=mask_generator,
             dtype=inputs_dtype,
             free_shapes=none_or_str(cfg.crops.free_shapes),
+            use_ch_patch_embed=cfg.train.use_ch_patch_embed,
         )
     return collate_fn_cpu, collate_fn_gpu
 
@@ -271,11 +273,10 @@ def do_train(cfg, model, resume=False):
     )
 
     # setup data preprocessing
-
     img_size = cfg.crops.global_crops_size
     patch_size = cfg.student.patch_size
     n_tokens = (img_size // patch_size) ** 2
-    print(f"Number of tokens {n_tokens}")
+
     mask_generator = MaskingGenerator(
         input_size=(img_size // patch_size, img_size // patch_size),
         max_num_patches=0.5 * img_size // patch_size * img_size // patch_size,
@@ -285,6 +286,11 @@ def do_train(cfg, model, resume=False):
     collate_fn_cpu, collate_fn_gpu = select_collate_fn(
         cfg, n_tokens, mask_generator, inputs_dtype
     )
+    if (
+        cfg.train.use_ch_patch_embed
+    ):  # use normal num tokens for mask, and multiply by in_chans for the rest
+        n_tokens *= model.student.backbone.in_chans
+    print(f"Number of tokens {n_tokens}")
 
     # setup data loader
 

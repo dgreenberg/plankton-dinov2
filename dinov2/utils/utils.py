@@ -32,7 +32,7 @@ def resize_pos_embed(pos_embed, input_shape, pos_shape, mode):
     Resize pos_embed using bicubic interpolate method.
     Args:
         pos_embed (torch.Tensor): Position embedding weights.
-        input_shpae (tuple): Tuple for (downsampled input image height,
+        input_shape (tuple): Tuple for (downsampled input image height,
             downsampled input image width).
         pos_shape (tuple): The resolution of downsampled origin training
             image.
@@ -84,7 +84,7 @@ def match_pos_embeds(
         )
         print(
             f"pos_embed_ref: {pos_embeds_ref.shape}, pos_embed_loaded: {pos_embeds_loaded.shape}"
-        )  #  torch.Size([1, 257, 768])
+        )  #  torch.Size([1, 1370, 768]) to torch.Size([1, 257, 384])
         pos_embeds_loaded = resize_pos_embed(
             pos_embeds_loaded,
             input_shape=img_shape,
@@ -171,22 +171,29 @@ def load_pretrained_weights(
             loaded_img_shape=loaded_img_shape,
         )
 
+    def reshape_with_except(val_c, key_c, model, reshape_patch_embeds=True):
+        try:
+            if "patch_embed" not in key_c or reshape_patch_embeds:
+                return val_c.reshape(model.state_dict()[key_c].shape)
+            else:
+                return val_c
+        except Exception as e:
+            print(f"Error: {e} for key {key_c}")
+            print(f"Src: {model.state_dict()[key_c].shape}, Tgt: {val_c.shape} ")
+            sys.exit(1)
+
     # shape loaded state_dict like model state_dict
-    try:
-        state_dict = {
-            k_c: (
-                v_c.reshape(model.state_dict()[k_c].shape)
-                if k_c in model.state_dict().keys()
-                and v_c.shape != model.state_dict()[k_c].shape
-                else v_c
+    state_dict = {
+        k_c: (
+            reshape_with_except(
+                v_c, k_c, model, reshape_patch_embeds=not model.use_ch_patch_embed
             )
-            for k_c, v_c in state_dict.items()
-        }
-    except Exception as e:
-        print(f"Error: {e}")
-        print(f"{[(k_c, v_c.shape) for k_c, v_c in state_dict.items()]}")
-        print(f"{[(k_c, v_c.shape) for k_c, v_c in model.state_dict().items()]}")
-        sys.exit(1)
+            if k_c in model.state_dict().keys()
+            and v_c.shape != model.state_dict()[k_c].shape
+            else v_c
+        )
+        for k_c, v_c in state_dict.items()
+    }
 
     msg = model.load_state_dict(state_dict, strict=False)
     logger.info(

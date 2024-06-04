@@ -13,7 +13,12 @@ logger = logging.getLogger("dinov2")
 
 
 def build_model(
-    args, only_teacher=False, img_size=224, free_shapes=None, num_loc_crops=8
+    args,
+    only_teacher=False,
+    img_size=224,
+    free_shapes=None,
+    num_loc_crops=8,
+    use_ch_patch_embed=False,
 ):
     args.arch = args.arch.removesuffix("_memeff")
     if "vit" in args.arch:
@@ -31,6 +36,7 @@ def build_model(
             interpolate_antialias=args.interpolate_antialias,
             free_shapes=free_shapes,
             num_loc_crops=num_loc_crops,
+            use_ch_patch_embed=use_ch_patch_embed,
         )
         teacher = vits.__dict__[args.arch](**vit_kwargs)
         if only_teacher:
@@ -51,4 +57,5 @@ def build_model_from_cfg(cfg, only_teacher=False):
         img_size=cfg.crops.global_crops_size,
         free_shapes=none_or_str(cfg.crops.free_shapes),
         num_loc_crops=cfg.crops.local_crops_number,
+        use_ch_patch_embed=cfg.train.use_ch_patch_embed,
     )
