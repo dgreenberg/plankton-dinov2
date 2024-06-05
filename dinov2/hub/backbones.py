@@ -58,6 +58,8 @@ def _make_dinov2_model(
         )
         url = _DINOV2_BASE_URL + f"/{model_base_name}/{model_full_name}_pretrain.pth"
         state_dict = torch.hub.load_state_dict_from_url(url, map_location="cpu")
+        if "use_ch_patch_embed" in kwargs.keys() and kwargs["use_ch_patch_embed"]:
+            state_dict = {k: v for k, v in state_dict.items() if "patch_embed" not in k}
         model.load_state_dict(state_dict, strict=True)
 
     return model

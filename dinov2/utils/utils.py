@@ -156,6 +156,8 @@ def load_pretrained_weights(
             f"Error: Key {teacher_student_key} not recognized, options are: 'student', 'teacher'"
         )
         sys.exit(1)
+    if model.use_ch_patch_embed:
+        state_dict = {k: v for k, v in state_dict.items() if "patch_embed" not in k}
 
     keys_load = set(state_dict.keys())
     keys_model = set(model.state_dict().keys())
