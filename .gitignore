@@ -20,7 +20,7 @@ notebooks/time_vs_num_workers_workstation.png
 notebooks/dataloader_benchmark_results_10000_gpuTrue/time_vs_num_workers_workstation.png
 
 *.csv
-*.png
+*.png !docs/images/*.png
 logs/log.txt
 logs/*.txt
 logs/
@@ -29,3 +29,4 @@ notebooks/test_nb.ipynb
 notebooks/test_nb.ipynb
 checkpoints/
 data/
+output_dir/
