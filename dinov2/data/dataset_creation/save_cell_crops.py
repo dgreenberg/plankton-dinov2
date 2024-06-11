@@ -244,6 +244,7 @@ def main(args):
         txn_meta.put(idx_bytes, metadata_dict)
 
     base_lmdb_dir = os.path.join(BASE_DIR, "lmdb")
+    os.makedirs(base_lmdb_dir, exist_ok=True)
     map_size = int(1e11)
 
     for dataset, path in paths.items()[0:1]:
@@ -336,3 +337,7 @@ def main(args):
         env_imgs.close()
         env_metadata.close()
         print(f"FINISHED {lmdb_imgs_path}")
+
+
+if __name__ == "__main__":
+    main()
