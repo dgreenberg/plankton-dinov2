@@ -2,6 +2,7 @@ import argparse
 import json
 import os
 import sys
+from typing import OrderedDict
 
 import imageio as io
 import lmdb
@@ -13,6 +14,7 @@ from tqdm import tqdm
 
 BASE_DIR = "/fast/AG_Kainmueller/data/pan_m"  # max cluster path
 # base_dir = "X:/data/pan_m" # local path
+MAP_SIZE = int(1e13)
 
 
 def mibi_breast_naming_conv(fov_path):
@@ -215,25 +217,46 @@ selected_channels = {
     ],
 }
 
+dataset_paths = {
+    "mibi_breast": os.path.join(BASE_DIR, "mibi_breast", "image_data", "samples"),
+    "mibi_decidua": os.path.join(BASE_DIR, "mibi_decidua", "image_data"),
+    "vectra_colon": os.path.join(BASE_DIR, "vectra_colon", "raw_structured"),
+    "vectra_pancreas": os.path.join(BASE_DIR, "vectra_pancreas", "raw_structured"),
+    "codex_colon": os.path.join(BASE_DIR, "codex_colon", "raw_structured"),
+}
+
+
+def change_lmdb_envs(
+    dataset_lmdb_dir, file_idx, env_imgs=None, env_labels=None, env_metadata=None
+):
+    if env_imgs is not None:
+        env_imgs.close()
+        env_labels.close()
+        env_metadata.close()
+
+    lmdb_imgs_path = os.path.join(dataset_lmdb_dir, "images" + str(file_idx))
+    lmdb_labels_path = os.path.join(dataset_lmdb_dir, "labels" + str(file_idx))
+    lmdb_metadata_path = os.path.join(dataset_lmdb_dir, "metadata" + str(file_idx))
+    os.makedirs(lmdb_imgs_path, exist_ok=True)
+    os.makedirs(lmdb_labels_path, exist_ok=True)
+    os.makedirs(lmdb_metadata_path, exist_ok=True)
+
+    env_imgs = lmdb.open(lmdb_imgs_path, map_size=MAP_SIZE)
+    env_labels = lmdb.open(lmdb_labels_path, map_size=MAP_SIZE)
+    env_metadata = lmdb.open(lmdb_metadata_path, map_size=MAP_SIZE)
+    return env_imgs, env_labels, env_metadata
+
 
 def main(args):
     # placeholder for normalization function, probably do channel-wise normalization?
     def normalize(x):
-        return (x - x.min()) / (
-            x.max() - x.min()
-        )  # TODO: Per channel?? * 255 to int8 ??
+        return (x - x.min()) / (x.max() - x.min())
 
     patch_size = args.patch_size
     n_jobs = args.n_jobs
     surrounding_size = patch_size // 2
 
-    paths = {
-        "mibi_breast": os.path.join(BASE_DIR, "mibi_breast", "image_data", "samples"),
-        "mibi_decidua": os.path.join(BASE_DIR, "mibi_decidua", "image_data"),
-        "vectra_colon": os.path.join(BASE_DIR, "vectra_colon", "raw_structured"),
-        "vectra_pancreas": os.path.join(BASE_DIR, "vectra_pancreas", "raw_structured"),
-        "codex_colon": os.path.join(BASE_DIR, "codex_colon", "raw_structured"),
-    }
+    dataset_paths = {k: dataset_paths[k] for k in args.dataset_keys}
 
     def load_channel(channel_path):
         channel_img = io.v2.imread(channel_path)  # (1024, 1024)
@@ -242,108 +265,108 @@ def main(args):
 
     base_lmdb_dir = BASE_DIR + "_lmdb"
     os.makedirs(base_lmdb_dir, exist_ok=True)
-    map_size = int(1e13)
 
-    for dataset, path in paths.items():
-        dataset_name = path.split("/")[len(BASE_DIR.split("/"))]
-        dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset_name)
-        lmdb_imgs_path = os.path.join(dataset_lmdb_dir, "images")
-        lmdb_labels_path = os.path.join(dataset_lmdb_dir, "labels")
-        lmdb_metadata_path = os.path.join(dataset_lmdb_dir, "metadata")
+    for dataset, path in dataset_paths.items():
+        dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset)
+        file_idx = 0
 
-        os.makedirs(lmdb_imgs_path, exist_ok=True)
-        os.makedirs(lmdb_labels_path, exist_ok=True)
-        os.makedirs(lmdb_metadata_path, exist_ok=True)
+        env_imgs, env_labels, env_metadata = None, None, None
+        file_idx += 1
 
-        env_imgs = lmdb.open(lmdb_imgs_path, map_size=map_size)
-        env_labels = lmdb.open(lmdb_labels_path, map_size=map_size)
-        env_metadata = lmdb.open(lmdb_metadata_path, map_size=map_size)
-        with env_metadata.begin(write=True) as txn_meta, env_imgs.begin(
-            write=True
-        ) as txn_imgs, env_labels.begin(write=True) as txn_labels:
-            fovs = os.listdir(path)
-            for img_idx, fov in enumerate(fovs):
-                if img_idx % 1000 == 0:
-                    print("idx, dataset, path, fov", img_idx, dataset, path, fov)
-
-                img_idx = f"{dataset_name}_{img_idx:04d}"
-                metadata_dict = {}
-
-                fov_path = os.path.join(path, fov)
-                channels = selected_channels[dataset]
-                channel_imgs = []
-                channel_names = [channel.split(".")[0] for channel in channels]
-                channel_paths = [
-                    os.path.join(fov_path, channel) for channel in channels
-                ]
-                # use joblib to parallelize loading of channels
-                channel_imgs = Parallel(n_jobs=n_jobs)(
-                    delayed(load_channel)(channel_path)
-                    for channel_path in tqdm(channel_paths)
+        fovs = os.listdir(path)
+        print(f"TOTAL #FOVS {len(fovs)} FOR DATASET {dataset}")
+        for img_idx, fov in tqdm(enumerate(fovs)):
+            if img_idx % 100 == 0:
+                print("idx, dataset, path, fov", img_idx, dataset, path, fov)
+                print("Switching context to new lmdb")
+                env_imgs, env_labels, env_metadata = change_lmdb_envs(
+                    dataset_lmdb_dir,
+                    file_idx=file_idx,
+                    env_imgs=env_imgs,
+                    env_labels=env_labels,
+                    env_metadata=env_metadata,
                 )
-                # concatenate channel images
-                multiplex_img = np.stack(channel_imgs, axis=0)
-                # get segmentation mask
-                naming_convention = naming_convention_dict[dataset]
-                segmentation_path = naming_convention(fov)
-                segmentation_mask = (
-                    io.v2.imread(segmentation_path).squeeze().astype(np.uint16)
-                )
+                file_idx += 1
 
-                print("segmentation mask shape", segmentation_mask.shape)
-                idx_bytes = img_idx.encode("utf-8")
-                txn_labels.put(idx_bytes, segmentation_mask.tobytes())
-
-                metadata_dict["fov"] = fov
-                metadata_dict["channel_names"] = channel_names
-                metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
-                txn_meta.put(idx_bytes, metadata_bytes)
-
-                # get regionprops
-                regionprops = pd.DataFrame(
-                    regionprops_table(
-                        segmentation_mask, properties=("label", "centroid")
-                    )
+                txn_meta, txn_imgs, txn_labels = (
+                    env_metadata.begin(write=True),
+                    env_imgs.begin(write=True),
+                    env_labels.begin(write=True),
                 )
-                # mirrorpad multiplex image to avoid edge effects
-                # @Jerome alternatively, one could just drop regions that are too close to the edge
-                multiplex_img = np.pad(
-                    multiplex_img,
-                    (
-                        (0, 0),
-                        (surrounding_size, surrounding_size),
-                        (surrounding_size, surrounding_size),
-                    ),
-                    mode="reflect",
-                )
-                regionprops["centroid-0"] = regionprops["centroid-0"] + surrounding_size
-                regionprops["centroid-1"] = regionprops["centroid-1"] + surrounding_size
-                # iterate over regions and extract patches surrounding centroids from multiplex image
-                patches = Parallel(n_jobs=n_jobs)(
-                    delayed(
-                        lambda idx, region: multiplex_img[
-                            :,
-                            int(region["centroid-0"] - surrounding_size) : int(
-                                region["centroid-0"] + surrounding_size
-                            ),
-                            int(region["centroid-1"] - surrounding_size) : int(
-                                region["centroid-1"] + surrounding_size
-                            ),
-                        ]
-                    )(idx, region)
-                    for idx, region in tqdm(regionprops.iterrows())
-                )
-                # save patch, label, fov, dataset and channel_names for each training sample
-                for p_idx, patch in enumerate(patches):
-                    patch_bytes = patch.tobytes()
-                    full_idx = f"{img_idx}_{p_idx:03d}"
+                # TODO: Use these context managers
 
-                    idx_bytes = str(full_idx).encode("utf-8")
-                    txn_imgs.put(idx_bytes, patch_bytes)
+            img_idx = f"{dataset}_{img_idx:04d}"
+            metadata_dict = {}
+
+            fov_path = os.path.join(path, fov)
+            channels = selected_channels[dataset]
+            channel_imgs = []
+            channel_names = [channel.split(".")[0] for channel in channels]
+            channel_paths = [os.path.join(fov_path, channel) for channel in channels]
+            # use joblib to parallelize loading of channels
+            channel_imgs = Parallel(n_jobs=n_jobs)(
+                delayed(load_channel)(channel_path) for channel_path in channel_paths
+            )
+            # concatenate channel images
+            multiplex_img = np.stack(channel_imgs, axis=0)
+            # get segmentation mask
+            naming_convention = naming_convention_dict[dataset]
+            segmentation_path = naming_convention(fov)
+            segmentation_mask = (
+                io.v2.imread(segmentation_path).squeeze().astype(np.uint16)
+            )
+
+            idx_bytes = img_idx.encode("utf-8")
+            txn_labels.put(idx_bytes, segmentation_mask.tobytes())
+
+            metadata_dict["fov"] = fov
+            metadata_dict["channel_names"] = channel_names
+            metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
+            txn_meta.put(idx_bytes, metadata_bytes)
+
+            # get regionprops
+            regionprops = pd.DataFrame(
+                regionprops_table(segmentation_mask, properties=("label", "centroid"))
+            )
+            # mirrorpad multiplex image to avoid edge effects
+            # @Jerome alternatively, one could just drop regions that are too close to the edge
+            multiplex_img = np.pad(
+                multiplex_img,
+                (
+                    (0, 0),
+                    (surrounding_size, surrounding_size),
+                    (surrounding_size, surrounding_size),
+                ),
+                mode="reflect",
+            )
+            regionprops["centroid-0"] = regionprops["centroid-0"] + surrounding_size
+            regionprops["centroid-1"] = regionprops["centroid-1"] + surrounding_size
+            # iterate over regions and extract patches surrounding centroids from multiplex image
+            patches = Parallel(n_jobs=n_jobs)(
+                delayed(
+                    lambda idx, region: multiplex_img[
+                        :,
+                        int(region["centroid-0"] - surrounding_size) : int(
+                            region["centroid-0"] + surrounding_size
+                        ),
+                        int(region["centroid-1"] - surrounding_size) : int(
+                            region["centroid-1"] + surrounding_size
+                        ),
+                    ]
+                )(idx, region)
+                for idx, region in regionprops.iterrows()
+            )
+            # save patch, label, fov, dataset and channel_names for each training sample
+            for p_idx, patch in enumerate(patches):
+                patch_bytes = patch.tobytes()
+                full_idx = f"{img_idx}_{p_idx:03d}"
+
+                idx_bytes = str(full_idx).encode("utf-8")
+                txn_imgs.put(idx_bytes, patch_bytes)
 
         env_imgs.close()
         env_metadata.close()
-        print(f"FINISHED {lmdb_imgs_path}")
+        print(f"FINISHED DATASET {dataset}, SAVED AT: {dataset_lmdb_dir}")
 
 
 def get_args_parser():
@@ -362,6 +385,18 @@ def get_args_parser():
         help="Number of jobs to run in parallel",
         default=8,
     )
+    parser.add_argument(
+        "--do_test_run",
+        action=argparse.BooleanOptionalAction,
+        help="Toggle test run with small subset of dataset",
+        default=False,
+    )
+    parser.add_argument(
+        "--dataset_keys",
+        nargs="+",
+        help="Names of datasets to process",
+    )
+
     return parser
 
 
