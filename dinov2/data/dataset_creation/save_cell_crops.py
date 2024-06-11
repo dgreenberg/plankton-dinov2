@@ -254,6 +254,10 @@ def main(args):
         dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset_name)
         lmdb_imgs_path = os.path.join(dataset_lmdb_dir, "images")
         lmdb_metadata_path = os.path.join(dataset_lmdb_dir, "metadata")
+
+        os.makedirs(lmdb_imgs_path, exist_ok=True)
+        os.makedirs(lmdb_metadata_path, exist_ok=True)
+
         env_imgs = lmdb.open(lmdb_imgs_path, map_size=map_size)
         env_metadata = lmdb.open(lmdb_metadata_path, map_size=map_size)
         with env_metadata.begin(write=True) as txn_meta:
