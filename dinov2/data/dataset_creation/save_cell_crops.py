@@ -290,7 +290,7 @@ def main(args):
                     io.v2.imread(segmentation_path).astype(np.uint16)
                 )
                 idx_bytes = img_idx.encode("utf-8")
-                txn_labels.put(img_idx, segmentation_mask.tobytes())
+                txn_labels.put(img_idx, segmentation_mask.encode())
 
                 metadata_dict["fov"] = fov
                 metadata_dict["channel_names"] = channel_names
