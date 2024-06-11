@@ -249,7 +249,7 @@ def main(args):
     os.makedirs(base_lmdb_dir, exist_ok=True)
     map_size = int(1e11)
 
-    for dataset, path in paths.items()[0:1]:
+    for dataset, path in paths.items():
         dataset_name = path.split("/")[len(BASE_DIR.split("/"))]
         dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset_name)
         lmdb_imgs_path = os.path.join(dataset_lmdb_dir, "images")
