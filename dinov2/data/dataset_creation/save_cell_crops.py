@@ -1,4 +1,5 @@
 import argparse
+import json
 import os
 import sys
 
@@ -235,15 +236,9 @@ def main(args):
     }
 
     def load_channel(channel_path):
-        channel_img = io.imread(channel_path)
-        print("channel_img.shape", channel_img.shape)
+        channel_img = io.v2.imread(channel_path)  # (1024, 1024)
         channel_img = normalize(np.squeeze(channel_img))
         return channel_img
-
-    def save_lmdb_crop(idx, img_bytes, metadata_dict, txn_imgs, txn_meta):
-        idx_bytes = str(idx).encode("utf-8")
-        txn_imgs.put(idx_bytes, img_bytes)
-        txn_meta.put(idx_bytes, metadata_dict)
 
     base_lmdb_dir = BASE_DIR + "_lmdb"
     os.makedirs(base_lmdb_dir, exist_ok=True)
@@ -253,92 +248,96 @@ def main(args):
         dataset_name = path.split("/")[len(BASE_DIR.split("/"))]
         dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset_name)
         lmdb_imgs_path = os.path.join(dataset_lmdb_dir, "images")
+        lmdb_labels_path = os.path.join(dataset_lmdb_dir, "labels")
         lmdb_metadata_path = os.path.join(dataset_lmdb_dir, "metadata")
 
         os.makedirs(lmdb_imgs_path, exist_ok=True)
+        os.makedirs(lmdb_labels_path, exist_ok=True)
         os.makedirs(lmdb_metadata_path, exist_ok=True)
 
         env_imgs = lmdb.open(lmdb_imgs_path, map_size=map_size)
+        env_labels = lmdb.open(lmdb_labels_path, map_size=map_size)
         env_metadata = lmdb.open(lmdb_metadata_path, map_size=map_size)
-        with env_metadata.begin(write=True) as txn_meta:
-            with env_imgs.begin(write=True) as txn_imgs:
-                fovs = os.listdir(path)
-                for img_idx, fov in enumerate(fovs):
-                    if img_idx % 1000 == 0:
-                        print("idx, dataset, path, fov", img_idx, dataset, path, fov)
+        with env_metadata.begin(write=True) as txn_meta, env_imgs.begin(
+            write=True
+        ) as txn_imgs, env_labels.begin(write=True) as txn_labels:
+            fovs = os.listdir(path)
+            for img_idx, fov in enumerate(fovs):
+                if img_idx % 1000 == 0:
+                    print("idx, dataset, path, fov", img_idx, dataset, path, fov)
 
-                    metadata_dict = {}
+                img_idx = f"{dataset_name}_{img_idx:04d}"
+                metadata_dict = {}
 
-                    fov_path = os.path.join(path, fov)
-                    channels = selected_channels[dataset]
-                    channel_imgs = []
-                    channel_names = [channel.split(".")[0] for channel in channels]
-                    channel_paths = [
-                        os.path.join(fov_path, channel) for channel in channels
-                    ]
-                    # use joblib to parallelize loading of channels
-                    channel_imgs = Parallel(n_jobs=n_jobs)(
-                        delayed(load_channel)(channel_path)
-                        for channel_path in tqdm(channel_paths)
-                    )
-                    # concatenate channel images
-                    multiplex_img = np.stack(channel_imgs, axis=0)
-                    # get segmentation mask
-                    naming_convention = naming_convention_dict[dataset]
-                    segmentation_path = naming_convention(fov)
-                    segmentation_mask = np.squeeze(
-                        io.imread(segmentation_path).astype(np.uint16)
-                    )
+                fov_path = os.path.join(path, fov)
+                channels = selected_channels[dataset]
+                channel_imgs = []
+                channel_names = [channel.split(".")[0] for channel in channels]
+                channel_paths = [
+                    os.path.join(fov_path, channel) for channel in channels
+                ]
+                # use joblib to parallelize loading of channels
+                channel_imgs = Parallel(n_jobs=n_jobs)(
+                    delayed(load_channel)(channel_path)
+                    for channel_path in tqdm(channel_paths)
+                )
+                # concatenate channel images
+                multiplex_img = np.stack(channel_imgs, axis=0)
+                # get segmentation mask
+                naming_convention = naming_convention_dict[dataset]
+                segmentation_path = naming_convention(fov)
+                segmentation_mask = np.squeeze(
+                    io.v2.imread(segmentation_path).astype(np.uint16)
+                )
+                idx_bytes = img_idx.encode("utf-8")
+                txn_labels.put(img_idx, segmentation_mask.tobytes())
 
-                    metadata_dict["fov"] = fov
-                    metadata_dict["channel_names"] = channel_names
-                    metadata_dict["segmentation_mask"] = segmentation_mask
+                metadata_dict["fov"] = fov
+                metadata_dict["channel_names"] = channel_names
+                metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
+                txn_meta.put(idx_bytes, metadata_bytes)
 
-                    # get regionprops
-                    regionprops = pd.DataFrame(
-                        regionprops_table(
-                            segmentation_mask, properties=("label", "centroid")
-                        )
+                # get regionprops
+                regionprops = pd.DataFrame(
+                    regionprops_table(
+                        segmentation_mask, properties=("label", "centroid")
                     )
-                    # mirrorpad multiplex image to avoid edge effects
-                    # @Jerome alternatively, one could just drop regions that are too close to the edge
-                    multiplex_img = np.pad(
-                        multiplex_img,
-                        (
-                            (0, 0),
-                            (surrounding_size, surrounding_size),
-                            (surrounding_size, surrounding_size),
-                        ),
-                        mode="reflect",
-                    )
-                    regionprops["centroid-0"] = (
-                        regionprops["centroid-0"] + surrounding_size
-                    )
-                    regionprops["centroid-1"] = (
-                        regionprops["centroid-1"] + surrounding_size
-                    )
-                    # iterate over regions and extract patches surrounding centroids from multiplex image
-                    patches = Parallel(n_jobs=n_jobs)(
-                        delayed(
-                            lambda idx, region: multiplex_img[
-                                :,
-                                int(region["centroid-0"] - surrounding_size) : int(
-                                    region["centroid-0"] + surrounding_size
-                                ),
-                                int(region["centroid-1"] - surrounding_size) : int(
-                                    region["centroid-1"] + surrounding_size
-                                ),
-                            ]
-                        )(idx, region)
-                        for idx, region in tqdm(regionprops.iterrows())
-                    )
-                    # save patch, label, fov, dataset and channel_names for each training sample
-                    for p_idx, patch in enumerate(patches):
-                        patch_bytes = patch.tobytes()
-                        full_idx = f"{dataset_name}_{img_idx:04d}_{p_idx:03d}"
-                        save_lmdb_crop(
-                            full_idx, patch_bytes, metadata_dict, txn_imgs, txn_meta
-                        )
+                )
+                # mirrorpad multiplex image to avoid edge effects
+                # @Jerome alternatively, one could just drop regions that are too close to the edge
+                multiplex_img = np.pad(
+                    multiplex_img,
+                    (
+                        (0, 0),
+                        (surrounding_size, surrounding_size),
+                        (surrounding_size, surrounding_size),
+                    ),
+                    mode="reflect",
+                )
+                regionprops["centroid-0"] = regionprops["centroid-0"] + surrounding_size
+                regionprops["centroid-1"] = regionprops["centroid-1"] + surrounding_size
+                # iterate over regions and extract patches surrounding centroids from multiplex image
+                patches = Parallel(n_jobs=n_jobs)(
+                    delayed(
+                        lambda idx, region: multiplex_img[
+                            :,
+                            int(region["centroid-0"] - surrounding_size) : int(
+                                region["centroid-0"] + surrounding_size
+                            ),
+                            int(region["centroid-1"] - surrounding_size) : int(
+                                region["centroid-1"] + surrounding_size
+                            ),
+                        ]
+                    )(idx, region)
+                    for idx, region in tqdm(regionprops.iterrows())
+                )
+                # save patch, label, fov, dataset and channel_names for each training sample
+                for p_idx, patch in enumerate(patches):
+                    patch_bytes = patch.tobytes()
+                    full_idx = f"{img_idx}_{p_idx:03d}"
+
+                    idx_bytes = str(full_idx).encode("utf-8")
+                    txn_imgs.put(idx_bytes, patch_bytes)
 
         env_imgs.close()
         env_metadata.close()
