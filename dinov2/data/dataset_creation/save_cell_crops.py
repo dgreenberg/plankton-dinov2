@@ -245,7 +245,7 @@ def main(args):
         txn_imgs.put(idx_bytes, img_bytes)
         txn_meta.put(idx_bytes, metadata_dict)
 
-    base_lmdb_dir = os.path.join(BASE_DIR, "lmdb")
+    base_lmdb_dir = BASE_DIR + "_lmdb"
     os.makedirs(base_lmdb_dir, exist_ok=True)
     map_size = int(1e11)
 
