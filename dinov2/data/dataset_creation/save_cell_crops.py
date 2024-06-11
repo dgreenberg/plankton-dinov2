@@ -1,4 +1,6 @@
+import argparse
 import os
+import sys
 
 import imageio as io
 import lmdb
@@ -220,8 +222,8 @@ def main(args):
             x.max() - x.min()
         )  # TODO: Per channel?? * 255 to int8 ??
 
-    patch_size = 224
-    n_jobs = 8
+    patch_size = args.patch_size
+    n_jobs = args.n_jobs
     surrounding_size = patch_size // 2
 
     paths = {
@@ -339,5 +341,26 @@ def main(args):
         print(f"FINISHED {lmdb_imgs_path}")
 
 
+def get_args_parser():
+    parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--patch_size",
+        dest="patch_size",
+        type=int,
+        help="Patch size",
+        default=224,
+    )
+    parser.add_argument(
+        "--n_jobs",
+        dest="n_jobs",
+        type=int,
+        help="Number of jobs to run in parallel",
+        default=8,
+    )
+    return parser
+
+
 if __name__ == "__main__":
-    main()
+    args_parser = get_args_parser()
+    args = args_parser.parse_args()
+    sys.exit(main(args))
