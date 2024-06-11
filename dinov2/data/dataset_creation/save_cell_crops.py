@@ -8,7 +8,7 @@ import numpy as np
 import pandas as pd
 from joblib import Parallel, delayed
 from skimage.measure import regionprops_table
-from tqdm.notebook import tqdm
+from tqdm import tqdm
 
 BASE_DIR = "/fast/AG_Kainmueller/data/pan_m"  # max cluster path
 # base_dir = "X:/data/pan_m" # local path
