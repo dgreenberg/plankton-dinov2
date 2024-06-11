@@ -286,11 +286,13 @@ def main(args):
                 # get segmentation mask
                 naming_convention = naming_convention_dict[dataset]
                 segmentation_path = naming_convention(fov)
-                segmentation_mask = np.squeeze(
-                    io.v2.imread(segmentation_path).astype(np.uint16)
+                segmentation_mask = (
+                    io.v2.imread(segmentation_path).squeeze().astype(np.uint16)
                 )
+
+                print("segmentation mask shape", segmentation_mask.shape)
                 idx_bytes = img_idx.encode("utf-8")
-                txn_labels.put(img_idx, bytes(segmentation_mask))
+                txn_labels.put(idx_bytes, segmentation_mask.tobytes())
 
                 metadata_dict["fov"] = fov
                 metadata_dict["channel_names"] = channel_names
