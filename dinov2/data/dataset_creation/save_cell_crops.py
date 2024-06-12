@@ -15,7 +15,6 @@ from tqdm import tqdm
 BASE_DIR = "/fast/AG_Kainmueller/data/pan_m"  # max cluster path
 # base_dir = "X:/data/pan_m" # local path
 MAP_SIZE = int(1e12)  # 1TB
-NUM_IMGS_PER_LMDB_FILE = 100
 
 
 def mibi_breast_naming_conv(fov_path):
@@ -259,6 +258,7 @@ def load_channel(channel_path):
 
 
 def main(args):
+    NUM_IMGS_PER_LMDB_FILE = args.num_imgs_per_lmdb_file
     start_fov_idx = args.start_fov_idx
     end_fov_idx = args.end_fov_idx
 
@@ -378,6 +378,12 @@ def main(args):
 
 def get_args_parser():
     parser = argparse.ArgumentParser()
+    parser.add_argument(
+        "--num_imgs_per_lmdb_file",
+        type=int,
+        help="num_imgs_per_lmdb_file",
+        default=50,
+    )
     parser.add_argument(
         "--patch_size",
         dest="patch_size",
