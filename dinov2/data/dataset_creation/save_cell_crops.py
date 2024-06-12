@@ -359,7 +359,7 @@ def fov_to_lmdb_crops(
 
 
 def main(args):
-    start_fov_dix = args.start_fov_dix
+    start_fov_idx = args.start_fov_idx
     end_fov_idx = args.end_fov_idx
 
     patch_size = args.patch_size
@@ -393,7 +393,7 @@ def main(args):
                 env_labels=None,
                 env_metadata=None,
             )
-            for img_idx, fov in tqdm(enumerate(sorted(fovs)[start_fov_dix:end_fov_idx]))
+            for img_idx, fov in tqdm(enumerate(sorted(fovs)[start_fov_idx:end_fov_idx]))
         )
 
         env_imgs.close()
@@ -431,13 +431,13 @@ def get_args_parser():
         mibi_breast, mibi_decidua, vectra_colon, vectra_pancreas, codex_colon""",
     )
     parser.add_argument(
-        "--start_fov_dix",
+        "--start_fov_idx",
         type=int,
         help="Start index of FOVs to process",
         default=0,
     )
     parser.add_argument(
-        "--end_fov_dix",
+        "--end_fov_idx",
         type=int,
         help="End index of FOVs to process",
         default=-1,
