@@ -255,8 +255,7 @@ def main(args):
     patch_size = args.patch_size
     n_jobs = args.n_jobs
     surrounding_size = patch_size // 2
-
-    dataset_paths = {k: dataset_paths[k] for k in args.dataset_keys}
+    sel_dataset_paths = {k: dataset_paths[k] for k in args.dataset_keys}
 
     def load_channel(channel_path):
         channel_img = io.v2.imread(channel_path)  # (1024, 1024)
@@ -266,7 +265,7 @@ def main(args):
     base_lmdb_dir = BASE_DIR + "_lmdb"
     os.makedirs(base_lmdb_dir, exist_ok=True)
 
-    for dataset, path in dataset_paths.items():
+    for dataset, path in sel_dataset_paths.items():
         dataset_lmdb_dir = os.path.join(base_lmdb_dir, dataset)
         file_idx = 0
 
@@ -394,7 +393,8 @@ def get_args_parser():
     parser.add_argument(
         "--dataset_keys",
         nargs="+",
-        help="Names of datasets to process",
+        help="""Names of datasets to process. One or more of the follwowing:
+        mibi_breast, mibi_decidua, vectra_colon, vectra_pancreas, codex_colon""",
     )
 
     return parser
