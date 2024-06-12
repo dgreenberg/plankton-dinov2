@@ -271,7 +271,7 @@ def fov_to_lmdb_crops(
     env_labels=None,
     env_metadata=None,
 ):
-    fov_name_cleaned = "_".join(e for e in str(fov) if e.isalnum())
+    fov_name_cleaned = "".join(e for e in str(fov) if e.isalnum())
     txn_meta, txn_imgs, txn_labels = None, None, None
     if img_idx % NUM_IMGS_PER_LMDB_FILE == 0:
         print(
@@ -291,6 +291,9 @@ def fov_to_lmdb_crops(
             env_metadata.begin(write=True),
             env_imgs.begin(write=True),
             env_labels.begin(write=True),
+        )
+        print(
+            f"txn_meta: {txn_meta}, txn_imgs: {txn_imgs}, txn_labels: {txn_labels}, file_idx {file_idx} "
         )
 
     img_idx = f"{dataset}_{img_idx:04d}"
