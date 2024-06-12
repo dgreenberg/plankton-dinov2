@@ -15,6 +15,7 @@ from tqdm import tqdm
 BASE_DIR = "/fast/AG_Kainmueller/data/pan_m"  # max cluster path
 # base_dir = "X:/data/pan_m" # local path
 MAP_SIZE = int(1e13)
+NUM_IMGS_PER_LMDB_FILE = 100
 
 
 def mibi_breast_naming_conv(fov_path):
@@ -275,8 +276,11 @@ def main(args):
         fovs = os.listdir(path)
         print(f"TOTAL #FOVS {len(fovs)} FOR DATASET {dataset}")
         for img_idx, fov in tqdm(enumerate(fovs)):
-            if img_idx % 100 == 0:
-                print("idx, dataset, path, fov", img_idx, dataset, path, fov)
+            fov_name_cleaned = "".join(e for e in str(fov) if e.isalnum())
+            if img_idx % NUM_IMGS_PER_LMDB_FILE == 0:
+                print(
+                    f"idx: {img_idx}, dataset: {dataset}, path: {path}, fov: {fov_name_cleaned}"
+                )
                 print("Switching context to new lmdb")
                 env_imgs, env_labels, env_metadata = change_lmdb_envs(
                     dataset_lmdb_dir,
