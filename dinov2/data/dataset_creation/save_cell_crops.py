@@ -301,7 +301,9 @@ def fov_to_lmdb_crops(
     channel_names = [channel.split(".")[0] for channel in channels]
     channel_paths = [os.path.join(fov_path, channel) for channel in channels]
     # use joblib to parallelize loading of channels
-    channel_imgs = [load_channel(channel_path) for channel_path in channel_paths]
+    channel_imgs = Parallel(n_jobs=n_jobs)(
+        delayed(load_channel)(channel_path) for channel_path in channel_paths
+    )
     # concatenate channel images
     multiplex_img = np.stack(channel_imgs, axis=0)
     # get segmentation mask
@@ -335,18 +337,20 @@ def fov_to_lmdb_crops(
     regionprops["centroid-0"] = regionprops["centroid-0"] + surrounding_size
     regionprops["centroid-1"] = regionprops["centroid-1"] + surrounding_size
     # iterate over regions and extract patches surrounding centroids from multiplex image
-    patches = [
-        multiplex_img[
-            :,
-            int(region["centroid-0"] - surrounding_size) : int(
-                region["centroid-0"] + surrounding_size
-            ),
-            int(region["centroid-1"] - surrounding_size) : int(
-                region["centroid-1"] + surrounding_size
-            ),
-        ]
-        for _, region in regionprops.iterrows()
-    ]
+    patches = Parallel(n_jobs=n_jobs)(
+        delayed(
+            lambda idx, region: multiplex_img[
+                :,
+                int(region["centroid-0"] - surrounding_size) : int(
+                    region["centroid-0"] + surrounding_size
+                ),
+                int(region["centroid-1"] - surrounding_size) : int(
+                    region["centroid-1"] + surrounding_size
+                ),
+            ]
+        )(idx, region)
+        for idx, region in regionprops.iterrows()
+    )
 
     # save patch, label, fov, dataset and channel_names for each training sample
     print(f"Saving patches {len(patches)} for img {img_idx}")
@@ -379,8 +383,8 @@ def main(args):
 
         fovs = os.listdir(path)
         print(f"TOTAL #FOVS {len(fovs)} FOR DATASET {dataset}")
-        Parallel(n_jobs=n_jobs)(
-            delayed(fov_to_lmdb_crops)(
+        [
+            fov_to_lmdb_crops(
                 img_idx,
                 fov,
                 file_idx,
@@ -394,7 +398,7 @@ def main(args):
                 env_metadata=None,
             )
             for img_idx, fov in tqdm(enumerate(sorted(fovs)[start_fov_idx:end_fov_idx]))
-        )
+        ]
 
         env_imgs.close()
         env_metadata.close()
