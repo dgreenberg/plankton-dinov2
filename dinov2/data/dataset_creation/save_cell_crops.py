@@ -271,7 +271,8 @@ def fov_to_lmdb_crops(
     env_labels=None,
     env_metadata=None,
 ):
-    fov_name_cleaned = "".join(e for e in str(fov) if e.isalnum())
+    fov_name_cleaned = "_".join(e for e in str(fov) if e.isalnum())
+    txn_meta, txn_imgs, txn_labels = None, None, None
     if img_idx % NUM_IMGS_PER_LMDB_FILE == 0:
         print(
             f'idx: {img_idx}, dataset: {dataset}, path: {path}, fov: "{fov_name_cleaned}"'
@@ -353,7 +354,7 @@ def fov_to_lmdb_crops(
     )
 
     # save patch, label, fov, dataset and channel_names for each training sample
-    print(f"Saving patches {len(patches)} for img {img_idx}")
+    print(f"Saving {len(patches)} patches for img {img_idx}")
     for p_idx, patch in enumerate(patches):
         patch_bytes = patch.tobytes()
         full_idx = f"{img_idx}_{p_idx:03d}"
