@@ -279,7 +279,6 @@ def main(args):
         print(f"TOTAL #FOVS {len(fovs)} FOR DATASET {dataset}")
         for img_idx, fov in tqdm(enumerate(sorted(fovs)[start_fov_idx:end_fov_idx])):
             fov_name_cleaned = "".join(e for e in str(fov) if e.isalnum())
-            txn_meta, txn_imgs, txn_labels = None, None, None
             if img_idx % NUM_IMGS_PER_LMDB_FILE == 0:
                 print(
                     f'idx: {img_idx}, dataset: {dataset}, path: {path}, fov: "{fov_name_cleaned}"'
@@ -298,9 +297,6 @@ def main(args):
                     env_metadata.begin(write=True),
                     env_imgs.begin(write=True),
                     env_labels.begin(write=True),
-                )
-                print(
-                    f"txn_meta: {txn_meta}, txn_imgs: {txn_imgs}, txn_labels: {txn_labels}, file_idx {file_idx} "
                 )
 
             img_idx = f"{dataset}_{img_idx:04d}"
