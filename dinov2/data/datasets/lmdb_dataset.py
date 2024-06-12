@@ -103,7 +103,7 @@ class LMDBDataset(ImageNet):
                 meminit=False,
             )
             # ex: "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
-            print("lmdb_env_imgs.stat()", lmdb_env_imgs.stat())
+            print(lmdb_path_imgs, "lmdb_env_imgs.stat()", lmdb_env_imgs.stat())
 
             lmdb_txn_labels = lmdb_env_labels.begin()
             lmdb_txn_imgs = lmdb_env_imgs.begin()

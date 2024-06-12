@@ -14,7 +14,7 @@ from tqdm import tqdm
 
 BASE_DIR = "/fast/AG_Kainmueller/data/pan_m"  # max cluster path
 # base_dir = "X:/data/pan_m" # local path
-MAP_SIZE = int(1e13)
+MAP_SIZE = int(1e12)  # 1TB
 NUM_IMGS_PER_LMDB_FILE = 100
 
 
@@ -336,7 +336,7 @@ def fov_to_lmdb_crops(
     regionprops["centroid-1"] = regionprops["centroid-1"] + surrounding_size
     # iterate over regions and extract patches surrounding centroids from multiplex image
     patches = [
-        lambda idx, region: multiplex_img[
+        multiplex_img[
             :,
             int(region["centroid-0"] - surrounding_size) : int(
                 region["centroid-0"] + surrounding_size
@@ -345,10 +345,11 @@ def fov_to_lmdb_crops(
                 region["centroid-1"] + surrounding_size
             ),
         ]
-        for idx, region in regionprops.iterrows()
+        for _, region in regionprops.iterrows()
     ]
 
     # save patch, label, fov, dataset and channel_names for each training sample
+    print(f"Saving patches {len(patches)} for img {img_idx}")
     for p_idx, patch in enumerate(patches):
         patch_bytes = patch.tobytes()
         full_idx = f"{img_idx}_{p_idx:03d}"
