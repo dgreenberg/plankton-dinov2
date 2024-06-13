@@ -113,7 +113,7 @@ class LMDBDataset(ImageNet):
             lmdb_cursor = lmdb_txn_labels.cursor()
             for key, value in lmdb_cursor:
                 entry = dict()
-                entry["index"] = int(key.decode())
+                entry["index"] = key.decode()
                 if self.with_targets:
                     entry["class_id"] = int(value.decode())
 
