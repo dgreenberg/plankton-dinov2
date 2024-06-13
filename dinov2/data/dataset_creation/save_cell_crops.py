@@ -13,8 +13,7 @@ from skimage.measure import regionprops_table
 from tqdm import tqdm
 
 BASE_DIR = "/fast/AG_Kainmueller/data/pan_m"  # max cluster path
-# base_dir = "X:/data/pan_m" # local path
-MAP_SIZE = int(1e12)  # 1TB
+MAP_SIZE = int(1e11)  # 100GB
 
 
 def mibi_breast_naming_conv(fov_path):
@@ -238,9 +237,11 @@ def change_lmdb_envs(
         env_labels.close()
         env_metadata.close()
 
-    lmdb_imgs_path = os.path.join(dataset_lmdb_dir, "images" + str(file_idx))
-    lmdb_labels_path = os.path.join(dataset_lmdb_dir, "labels" + str(file_idx))
-    lmdb_metadata_path = os.path.join(dataset_lmdb_dir, "metadata" + str(file_idx))
+    lmdb_imgs_path = os.path.join(dataset_lmdb_dir, str(file_idx) + "-TRAIN_images")
+    lmdb_labels_path = os.path.join(dataset_lmdb_dir, str(file_idx) + "-TRAIN_labels")
+    lmdb_metadata_path = os.path.join(
+        dataset_lmdb_dir, str(file_idx) + "-TRAIN_metadata"
+    )
     os.makedirs(lmdb_imgs_path, exist_ok=True)
     os.makedirs(lmdb_labels_path, exist_ok=True)
     os.makedirs(lmdb_metadata_path, exist_ok=True)
