@@ -313,6 +313,12 @@ def main(args):
             )
             # concatenate channel images
             multiplex_img = np.stack(channel_imgs, axis=0)
+
+            if not args.do_cell_crops:
+                multiplex_img_bytes = multiplex_img.tobytes()
+                idx_bytes = str(img_idx).encode("utf-8")
+                txn_imgs.put(idx_bytes, multiplex_img_bytes)
+
             # get segmentation mask
             naming_convention = naming_convention_dict[dataset]
             segmentation_path = naming_convention(fov)
@@ -328,47 +334,50 @@ def main(args):
             metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
             txn_meta.put(idx_bytes, metadata_bytes)
 
-            # get regionprops
-            regionprops = pd.DataFrame(
-                regionprops_table(segmentation_mask, properties=("label", "centroid"))
-            )
-            # mirrorpad multiplex image to avoid edge effects
-            # @Jerome alternatively, one could just drop regions that are too close to the edge
-            multiplex_img = np.pad(
-                multiplex_img,
-                (
-                    (0, 0),
-                    (surrounding_size, surrounding_size),
-                    (surrounding_size, surrounding_size),
-                ),
-                mode="reflect",
-            )
-            regionprops["centroid-0"] = regionprops["centroid-0"] + surrounding_size
-            regionprops["centroid-1"] = regionprops["centroid-1"] + surrounding_size
-            # iterate over regions and extract patches surrounding centroids from multiplex image
-            patches = Parallel(n_jobs=n_jobs)(
-                delayed(
-                    lambda idx, region: multiplex_img[
-                        :,
-                        int(region["centroid-0"] - surrounding_size) : int(
-                            region["centroid-0"] + surrounding_size
-                        ),
-                        int(region["centroid-1"] - surrounding_size) : int(
-                            region["centroid-1"] + surrounding_size
-                        ),
-                    ]
-                )(idx, region)
-                for idx, region in regionprops.iterrows()
-            )
+            if args.do_cell_crops:
+                # get regionprops
+                regionprops = pd.DataFrame(
+                    regionprops_table(
+                        segmentation_mask, properties=("label", "centroid")
+                    )
+                )
+                # mirrorpad multiplex image to avoid edge effects
+                # @Jerome alternatively, one could just drop regions that are too close to the edge
+                multiplex_img = np.pad(
+                    multiplex_img,
+                    (
+                        (0, 0),
+                        (surrounding_size, surrounding_size),
+                        (surrounding_size, surrounding_size),
+                    ),
+                    mode="reflect",
+                )
+                regionprops["centroid-0"] = regionprops["centroid-0"] + surrounding_size
+                regionprops["centroid-1"] = regionprops["centroid-1"] + surrounding_size
+                # iterate over regions and extract patches surrounding centroids from multiplex image
+                patches = Parallel(n_jobs=n_jobs)(
+                    delayed(
+                        lambda idx, region: multiplex_img[
+                            :,
+                            int(region["centroid-0"] - surrounding_size) : int(
+                                region["centroid-0"] + surrounding_size
+                            ),
+                            int(region["centroid-1"] - surrounding_size) : int(
+                                region["centroid-1"] + surrounding_size
+                            ),
+                        ]
+                    )(idx, region)
+                    for idx, region in regionprops.iterrows()
+                )
 
-            # save patch, label, fov, dataset and channel_names for each training sample
-            print(f"Saving {len(patches)} patches for img {img_idx}")
-            for p_idx, patch in enumerate(patches):
-                patch_bytes = patch.tobytes()
-                full_idx = f"{img_idx}_{p_idx:03d}"
+                # save patch, label, fov, dataset and channel_names for each training sample
+                print(f"Saving {len(patches)} patches for img {img_idx}")
+                for p_idx, patch in enumerate(patches):
+                    patch_bytes = patch.tobytes()
+                    full_idx = f"{img_idx}_{p_idx:03d}"
 
-                idx_bytes = str(full_idx).encode("utf-8")
-                txn_imgs.put(idx_bytes, patch_bytes)
+                    idx_bytes = str(full_idx).encode("utf-8")
+                    txn_imgs.put(idx_bytes, patch_bytes)
 
         env_imgs.close()
         env_metadata.close()
@@ -421,6 +430,12 @@ def get_args_parser():
         type=int,
         help="End index of FOVs to process",
         default=-1,
+    )
+    parser.add_argument(
+        "--do_cell_crops",
+        action=argparse.BooleanOptionalAction,
+        help="Toggle cell crops generation, otherwise whole multiplex images are saved",
+        default=False,
     )
 
     return parser
