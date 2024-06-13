@@ -279,10 +279,11 @@ def main(args):
         print(f"TOTAL #FOVS {len(fovs)} FOR DATASET {dataset}")
         for img_idx, fov in tqdm(enumerate(sorted(fovs)[start_fov_idx:end_fov_idx])):
             fov_name_cleaned = "".join(e for e in str(fov) if e.isalnum())
-            if img_idx % NUM_IMGS_PER_LMDB_FILE == 0:
+            if img_idx % 50 == 0:
                 print(
-                    f'idx: {img_idx}, dataset: {dataset}, path: {path}, fov: "{fov_name_cleaned}"'
+                    f'idx: {img_idx}/{len(fovs)}, dataset: {dataset}, path: {path}, fov: "{fov_name_cleaned}"'
                 )
+            if img_idx % NUM_IMGS_PER_LMDB_FILE == 0:
                 print("Switching context to new lmdb")
                 env_imgs, env_labels, env_metadata = change_lmdb_envs(
                     dataset_lmdb_dir,
