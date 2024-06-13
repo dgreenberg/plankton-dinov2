@@ -311,16 +311,6 @@ def main(args):
                 fov_name_cleaned = "".join(e for e in str(fov) if e.isalnum())
                 if img_idx % 50 == 0:
                     print(f'idx: {img_idx}/{len(fovs)}, fov: "{fov_name_cleaned}"')
-                if img_idx % NUM_IMGS_PER_LMDB_FILE == 0:
-                    print("Opening new lmdb file")
-                    txn_meta, txn_imgs, txn_labels = change_lmdb_envs(
-                        dataset_lmdb_dir,
-                        file_idx=file_idx,
-                        env_imgs=env_imgs,
-                        env_labels=env_labels,
-                        env_metadata=env_metadata,
-                    )
-                    file_idx += 1
 
                 img_idx = f"{dataset}_{img_idx:04d}"
                 metadata_dict = {}
