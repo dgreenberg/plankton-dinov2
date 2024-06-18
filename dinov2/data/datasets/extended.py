@@ -28,7 +28,14 @@ class ExtendedVisionDataset(VisionDataset):
     def __getitem__(
         self, index: int
     ) -> Union[Tuple[Any, Any], torch.Tensor, Image.Image]:
-        img_bytes = self.get_image_data(index)
+        num_channels = 3  # base number
+        return_tuple = self.get_image_data(index)
+        if (
+            isinstance(return_tuple, tuple) and len(return_tuple) == 2
+        ):  # image, num_channels
+            img_bytes, num_channels = return_tuple
+        else:
+            img_bytes = return_tuple
         try:
             # have to copy bc stream not writeable
             image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)
@@ -37,8 +44,8 @@ class ExtendedVisionDataset(VisionDataset):
             if "plankton" in str(self.root):
                 image = decode_image(image, ImageReadMode.RGB)
             else:
-                image_size = int(np.sqrt(image.shape[0] / 3))
-                image = image.reshape(3, image_size, image_size)
+                image_size = int(np.sqrt(image.shape[0] / num_channels))
+                image = image.reshape(num_channels, image_size, image_size)
             image = (image / 255.0).to(torch.float32)
         except Exception as e:
             print(e)

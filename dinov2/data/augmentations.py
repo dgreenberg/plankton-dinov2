@@ -457,7 +457,6 @@ class DataAugmentationDINO(object):
         # Select non-zero 14x14 patches from local_crops and flat concat
         # Input: list N N_p [c p p]
         # Output: C P NxP
-        # TODO: remove local_patch_pos_list
         tot_patches = nb_gc_patches
         list_flat_patches, crop_len_list = [], []
         filtered_patch_pos_list, filtered_bboxes = [], []

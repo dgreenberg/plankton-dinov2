@@ -6,7 +6,7 @@ from typing import Optional
 import lmdb
 import numpy as np
 
-from dinov2.data.datasets import ImageNet
+from dinov2.data.datasets.extended import ExtendedVisionDataset
 
 _TargetLMDBDataset = int
 
@@ -18,8 +18,8 @@ class _SplitLMDBDataset(Enum):
     ALL = "all"
 
 
-# TODO: Fix inheritance logic
-class LMDBDataset(ImageNet):
+# TODO: Load ground truth??
+class LMDBDataset(ExtendedVisionDataset):
     Target = _TargetLMDBDataset
     Split = _SplitLMDBDataset
     lmdb_handles = {}
@@ -79,8 +79,10 @@ class LMDBDataset(ImageNet):
         file_list_imgs = sorted(
             [el for el in file_list if el.endswith("imgs") or el.endswith("images")]
         )
+        file_list_meta = sorted([el for el in file_list if el.endswith("meta")])
         print("Datasets imgs file list: ", file_list_imgs)
 
+        assert len(file_list_labels) == len(file_list_imgs) == len(file_list_meta)
         accumulated = []
         self._lmdb_txns = dict()
         global_idx = 0
@@ -88,7 +90,10 @@ class LMDBDataset(ImageNet):
         if self.do_short_run:
             file_list_labels = file_list_labels[:1]
             file_list_imgs = file_list_imgs[:1]
-        for lmdb_path_labels, lmdb_path_imgs in zip(file_list_labels, file_list_imgs):
+            file_list_meta = file_list_meta[:1]
+        for lmdb_path_labels, lmdb_path_imgs, lmdb_path_meta in zip(
+            file_list_labels, file_list_imgs, file_list_meta
+        ):
             lmdb_env_labels = lmdb.open(
                 lmdb_path_labels,
                 readonly=True,
@@ -103,20 +108,34 @@ class LMDBDataset(ImageNet):
                 readahead=False,
                 meminit=False,
             )
-            # ex: "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
+            lmdb_env_meta = lmdb.open(
+                lmdb_path_meta,
+                readonly=True,
+                lock=False,
+                readahead=False,
+                meminit=False,
+            )
             print(lmdb_path_imgs, "lmdb_env_imgs.stat()", lmdb_env_imgs.stat())
 
             lmdb_txn_labels = lmdb_env_labels.begin()
             lmdb_txn_imgs = lmdb_env_imgs.begin()
+            lmdb_txn_meta = lmdb_env_meta.begin()
             # save img tcxn from which to get labels later
             self._lmdb_txns[lmdb_path_imgs] = lmdb_txn_imgs
 
-            lmdb_cursor = lmdb_txn_labels.cursor()
-            for key, value in lmdb_cursor:
+            label_cursor = lmdb_txn_labels.cursor()
+            meta_cursor = lmdb_txn_meta.cursor()
+            for (key_label, value_label), (key_meta, value_meta) in zip(
+                label_cursor, meta_cursor
+            ):
                 entry = dict()
-                entry["index"] = key.decode()
-                if self.with_targets:
-                    entry["class_id"] = int(value.decode())
+                entry["index"] = key_label.decode()
+                value_meta = value_meta.decode()
+                entry["num_ch"] = len(value_meta["channel_names"])
+                entry["fov"] = value_meta["fov"]
+
+                # if self.with_targets: # TODO: Load ground truth
+                # entry["class_id"] = int(value.decode())
 
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
 
@@ -126,8 +145,10 @@ class LMDBDataset(ImageNet):
             if self.do_short_run:
                 accumulated = [el for el in accumulated if el["class_id"] < 5]
             # free up resources
-            lmdb_cursor.close()
+            label_cursor.close()
+            meta_cursor.close()
             lmdb_env_labels.close()
+            lmdb_env_meta.close()
 
         if self.with_targets:
             class_ids = [el["class_id"] for el in accumulated]
