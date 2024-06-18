@@ -76,13 +76,15 @@ class PanMDataset(ImageNet):
         file_list = glob.glob(extra_path)
 
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
-        print("Datasets labels file list: ", file_list_labels)
-
         file_list_imgs = sorted(
             [el for el in file_list if el.endswith("imgs") or el.endswith("images")]
         )
-        file_list_meta = sorted([el for el in file_list if el.endswith("meta")])
+        file_list_meta = sorted(
+            [el for el in file_list if el.endswith("metadata") or el.endswith("meta")]
+        )
         print("Datasets imgs file list: ", file_list_imgs)
+        print("Datasets labels file list: ", file_list_labels)
+        print("Datasets metadata file list: ", file_list_meta)
 
         assert len(file_list_labels) == len(file_list_imgs) == len(file_list_meta)
         accumulated = []
