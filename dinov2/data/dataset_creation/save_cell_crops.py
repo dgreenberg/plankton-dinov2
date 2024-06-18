@@ -309,7 +309,8 @@ def main(args):
         ):
             for img_idx, fov in tqdm(enumerate(sorted(fovs)), total=len(fovs)):
                 fov_name_cleaned = "".join(e for e in str(fov) if e.isalnum())
-                if img_idx % 50 == 0:
+                do_print = img_idx % 50 == 0
+                if do_print:
                     print(f'idx: {img_idx}/{len(fovs)}, fov: "{fov_name_cleaned}"')
 
                 img_idx = f"{dataset}_{img_idx:04d}"
@@ -329,8 +330,7 @@ def main(args):
                 )
                 # concatenate channel images
                 multiplex_img = np.stack(channel_imgs, axis=0)
-
-                if img_idx % 50 == 0:
+                if do_print:
                     print(multiplex_img.shape)
 
                 if not args.do_cell_crops:
