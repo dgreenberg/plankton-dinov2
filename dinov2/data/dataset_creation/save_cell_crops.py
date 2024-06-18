@@ -350,6 +350,7 @@ def main(args):
 
                 metadata_dict["fov"] = fov
                 metadata_dict["channel_names"] = channel_names
+                metadata_dict["img_shape"] = multiplex_img.shape
                 metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
                 txn_meta.put(idx_bytes, metadata_bytes)
 
