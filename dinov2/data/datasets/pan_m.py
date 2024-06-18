@@ -19,7 +19,7 @@ class _SplitLMDBDataset(Enum):
 
 
 # TODO: Load ground truth??
-class LMDBDataset(ExtendedVisionDataset):
+class PanMDataset(ExtendedVisionDataset):
     Target = _TargetLMDBDataset
     Split = _SplitLMDBDataset
     lmdb_handles = {}
@@ -28,7 +28,7 @@ class LMDBDataset(ExtendedVisionDataset):
         entry = self._entries[index]
         lmdb_txn = self._lmdb_txns[entry["lmdb_imgs_file"]]
         image_data = lmdb_txn.get(str(entry["index"]).encode("utf-8"))
-        return image_data
+        return image_data, entry["num_ch"]
 
     def get_target(self, index: int) -> Optional[Target]:
         if self.split in [_SplitLMDBDataset.TEST, _SplitLMDBDataset.ALL]:

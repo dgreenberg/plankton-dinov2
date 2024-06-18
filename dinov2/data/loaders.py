@@ -14,6 +14,7 @@ from .datasets import ImageNet, ImageNet22k
 from .datasets.hdf5_dataset import HDF5Dataset
 from .datasets.lmdb_dataset import LMDBDataset
 from .datasets.npy_dataset import NPYDataset
+from .datasets.pan_m import PanMDataset
 from .samplers import EpochSampler, InfiniteSampler, ShardedInfiniteSampler
 
 logger = logging.getLogger("dinov2")
@@ -73,6 +74,8 @@ def _parse_dataset_str(dataset_str: str):
         class_ = LMDBDataset
     elif name == "NPYDataset":
         class_ = NPYDataset
+    elif name == "PanMDataset":
+        class_ = PanMDataset
 
     else:
         raise ValueError(f'Unsupported dataset "{name}"')
