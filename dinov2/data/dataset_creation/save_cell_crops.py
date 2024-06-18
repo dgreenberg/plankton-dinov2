@@ -5,6 +5,7 @@ import sys
 from typing import OrderedDict
 
 import imageio as io
+import imageio.v3 as iio
 import lmdb
 import numpy as np
 import pandas as pd
@@ -259,14 +260,14 @@ def change_lmdb_envs(
     return txn_meta, txn_imgs, txn_labels
 
 
-def load_channel(channel_path):
-    channel_img = io.v2.imread(channel_path)  # (1024, 1024)
+def load_channel(channel_path, ch_idx, res_dict):
+    channel_img = iio.imread(channel_path)  # (N M)
     channel_img = normalize(np.squeeze(channel_img))
-    return channel_img
+    jpg_encoded = iio.imwrite("<bytes>", channel_img, extension=".jpeg")
+    res_dict[ch_idx].put(jpg_encoded)
 
 
 def main(args):
-    NUM_IMGS_PER_LMDB_FILE = args.num_imgs_per_lmdb_file
     start_fov_idx = args.start_fov_idx
     end_fov_idx = args.end_fov_idx
 
@@ -318,25 +319,24 @@ def main(args):
 
                 fov_path = os.path.join(path, fov)
                 channels = selected_channels[dataset]
-                channel_imgs = []
                 channel_names = [channel.split(".")[0] for channel in channels]
                 channel_paths = [
                     os.path.join(fov_path, channel) for channel in channels
                 ]
                 # use joblib to parallelize loading of channels
-                channel_imgs = Parallel(n_jobs=n_jobs)(
-                    delayed(load_channel)(channel_path)
-                    for channel_path in channel_paths
+                channel_bytes_dict = dict()
+                Parallel(n_jobs=n_jobs)(
+                    delayed(load_channel)(channel_path, ch_idx, channel_bytes_dict)
+                    for ch_idx, channel_path in enumerate(channel_paths)
                 )
                 # concatenate channel images
-                multiplex_img = np.stack(channel_imgs, axis=0)
-                if do_print:
-                    print(multiplex_img.shape)
-
+                # multiplex_img = np.stack(channel_imgs, axis=0)
                 if not args.do_cell_crops:
-                    multiplex_img_bytes = multiplex_img.tobytes()
+                    # multiplex_img_bytes = multiplex_img.tobytes()
                     idx_bytes = str(img_idx).encode("utf-8")
-                    txn_imgs.put(idx_bytes, multiplex_img_bytes)
+                    txn_imgs.put(
+                        idx_bytes, json.dumps(channel_bytes_dict).encode("utf-8")
+                    )
 
                 # get segmentation mask
                 naming_convention = naming_convention_dict[dataset]
@@ -344,16 +344,15 @@ def main(args):
                 segmentation_mask = (
                     io.v2.imread(segmentation_path).squeeze().astype(np.uint16)
                 )
-
                 idx_bytes = img_idx.encode("utf-8")
                 txn_labels.put(idx_bytes, segmentation_mask.tobytes())
 
                 metadata_dict["fov"] = fov
                 metadata_dict["channel_names"] = channel_names
-                metadata_dict["img_shape"] = multiplex_img.shape
                 metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
                 txn_meta.put(idx_bytes, metadata_bytes)
 
+                """
                 if args.do_cell_crops:
                     # get regionprops
                     regionprops = pd.DataFrame(
@@ -402,6 +401,7 @@ def main(args):
 
                         idx_bytes = str(full_idx).encode("utf-8")
                         txn_imgs.put(idx_bytes, patch_bytes)
+            """
 
         env_imgs.close()
         env_metadata.close()
@@ -411,12 +411,6 @@ def main(args):
 
 def get_args_parser():
     parser = argparse.ArgumentParser()
-    parser.add_argument(
-        "--num_imgs_per_lmdb_file",
-        type=int,
-        help="num_imgs_per_lmdb_file",
-        default=50,
-    )
     parser.add_argument(
         "--patch_size",
         dest="patch_size",

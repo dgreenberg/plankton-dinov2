@@ -31,7 +31,8 @@ class PanMDataset(ImageNet):
         entry = self._entries[index]
         lmdb_txn = self._lmdb_txns[entry["lmdb_imgs_file"]]
         image_data = lmdb_txn.get(str(entry["index"]).encode("utf-8"))
-        return image_data, entry["img_shape"]
+
+        return ast.literal_eval(image_data)  # return dict of channel image bytes
 
     def get_target(self, index: int) -> Optional[Target]:
         if self.split in [_SplitLMDBDataset.TEST, _SplitLMDBDataset.ALL]:
@@ -142,7 +143,6 @@ class PanMDataset(ImageNet):
 
                 # if self.with_targets: # TODO: Load ground truth
                 # entry["class_id"] = int(value.decode())
-
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
 
                 accumulated.append(entry)

@@ -31,31 +31,36 @@ class ExtendedVisionDataset(VisionDataset):
         num_channels = 3  # base number
         img_shape = None
         return_tuple = self.get_image_data(index)
-        if (
-            isinstance(return_tuple, tuple) and len(return_tuple) == 2
-        ):  # image, num_channels
-            img_bytes, img_shape = return_tuple
+        if isinstance(return_tuple, dict):  # image
+            image = [
+                torch.frombuffer(np.copy(ch_bytes), dtype=torch.float32)
+                for ch_bytes in return_tuple.values()
+            ]
+            image = torch.stack(image, dim=0)
+
         else:
             img_bytes = return_tuple
-        try:
-            # have to copy bc stream not writeable
-            image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)
-
-            if "plankton" in str(self.root):
-                image = decode_image(image, ImageReadMode.RGB)
-            elif img_shape is not None:
-                image = image.reshape(img_shape)
-            else:
-                image_size = int(np.sqrt(image.shape[0] / num_channels))
-                image = image.reshape(num_channels, image_size, image_size)
-            image = (image / 255.0).to(torch.float32)
-        except Exception as e:
-            print(e)
-            print("Error: torch.frombuffer failed, trying PIL...", file=sys.stderr)
             try:
-                image = ImageDataDecoder(img_bytes).decode()
+                # have to copy bc stream not writeable
+                image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)
+
+                if "plankton" in str(self.root):
+                    image = decode_image(image, ImageReadMode.RGB)
+                elif img_shape is not None:
+                    image = decode_image(image, ImageReadMode.UNCHANGED)
+                    print(image.shape)
+                    # image = image.reshape(img_shape) # not working
+                else:
+                    image_size = int(np.sqrt(image.shape[0] / num_channels))
+                    image = image.reshape(num_channels, image_size, image_size)
+                image = (image / 255.0).to(torch.float32)
             except Exception as e:
-                raise RuntimeError(f"can not read image for sample {index}") from e
+                print(e)
+                print("Error: torch.frombuffer failed, trying PIL...", file=sys.stderr)
+                try:
+                    image = ImageDataDecoder(img_bytes).decode()
+                except Exception as e:
+                    raise RuntimeError(f"can not read image for sample {index}") from e
 
         target = self.get_target(index)
         target = TargetDecoder(target).decode()
