@@ -6,6 +6,7 @@ from typing import Optional
 import lmdb
 import numpy as np
 
+from dinov2.data.datasets import ImageNet
 from dinov2.data.datasets.extended import ExtendedVisionDataset
 
 _TargetLMDBDataset = int
@@ -19,7 +20,8 @@ class _SplitLMDBDataset(Enum):
 
 
 # TODO: Load ground truth??
-class PanMDataset(ExtendedVisionDataset):
+# class PanMDataset(ExtendedVisionDataset):
+class PanMDataset(ImageNet):
     Target = _TargetLMDBDataset
     Split = _SplitLMDBDataset
     lmdb_handles = {}
