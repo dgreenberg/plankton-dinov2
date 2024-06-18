@@ -330,6 +330,9 @@ def main(args):
                 # concatenate channel images
                 multiplex_img = np.stack(channel_imgs, axis=0)
 
+                if img_idx % 50 == 0:
+                    print(multiplex_img.shape)
+
                 if not args.do_cell_crops:
                     multiplex_img_bytes = multiplex_img.tobytes()
                     idx_bytes = str(img_idx).encode("utf-8")

@@ -1,3 +1,4 @@
+import ast
 import glob
 import os
 from enum import Enum
@@ -134,7 +135,7 @@ class PanMDataset(ImageNet):
             ):
                 entry = dict()
                 entry["index"] = key_label.decode()
-                value_meta = value_meta.decode()
+                value_meta = ast.literal_eval(value_meta.decode())
                 entry["num_ch"] = len(value_meta["channel_names"])
                 entry["fov"] = value_meta["fov"]
 
