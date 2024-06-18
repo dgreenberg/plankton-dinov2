@@ -13,8 +13,8 @@ from skimage.measure import regionprops_table
 from tqdm import tqdm
 
 BASE_DIR = "/fast/AG_Kainmueller/data/pan_m"  # max cluster path
-MAP_SIZE_IMG = int(1e11)  # 100GB
-MAP_SIZE_META = int(1e9)  # 1GB
+MAP_SIZE_IMG = int(1e12)  # 1TB
+MAP_SIZE_META = int(1e8)  # 100MB
 
 
 def mibi_breast_naming_conv(fov_path):
