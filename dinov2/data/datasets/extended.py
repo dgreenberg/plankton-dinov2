@@ -39,7 +39,7 @@ class ExtendedVisionDataset(VisionDataset):
                 for ch_bytes in img_bytes
             ]
             image = torch.stack(image, dim=0)
-
+            image = (image / 255.0).to(torch.float32)
         else:
             try:
                 # have to copy bc stream not writeable
