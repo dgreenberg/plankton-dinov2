@@ -177,6 +177,7 @@ def select_augmentations(cfg):
         "patch_size": cfg.student.patch_size,
         "use_native_res": cfg.crops.use_native_res,
         "do_seg_crops": none_or_str(cfg.crops.free_shapes),
+        "do_multi_channel": cfg.train.do_multi_channel,
     }
     if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
         data_transform_cpu = DataAugmentationDINO(use_kornia=False, **aug_kwargs)
