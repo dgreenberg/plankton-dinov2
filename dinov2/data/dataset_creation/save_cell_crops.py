@@ -260,11 +260,11 @@ def change_lmdb_envs(
     return txn_meta, txn_imgs, txn_labels
 
 
-def load_channel(channel_path, ch_idx, res_dict):
+def load_channel_bytes(channel_path):
     channel_img = iio.imread(channel_path)  # (N M)
     channel_img = normalize(np.squeeze(channel_img))
     jpg_encoded = iio.imwrite("<bytes>", channel_img, extension=".jpeg")
-    res_dict[ch_idx].put(jpg_encoded)
+    return jpg_encoded
 
 
 def main(args):
@@ -323,20 +323,11 @@ def main(args):
                 channel_paths = [
                     os.path.join(fov_path, channel) for channel in channels
                 ]
-                # use joblib to parallelize loading of channels
-                channel_bytes_dict = dict()
-                Parallel(n_jobs=n_jobs)(
-                    delayed(load_channel)(channel_path, ch_idx, channel_bytes_dict)
-                    for ch_idx, channel_path in enumerate(channel_paths)
-                )
-                # concatenate channel images
-                # multiplex_img = np.stack(channel_imgs, axis=0)
-                if not args.do_cell_crops:
-                    # multiplex_img_bytes = multiplex_img.tobytes()
-                    idx_bytes = str(img_idx).encode("utf-8")
-                    txn_imgs.put(
-                        idx_bytes, json.dumps(channel_bytes_dict).encode("utf-8")
-                    )
+
+                for ch_idx, channel_path in enumerate(channel_paths):
+                    channel_bytes = load_channel_bytes(channel_path)
+                    ch_idx_bytes = f"{img_idx}_ch{ch_idx}".encode("utf-8")
+                    txn_imgs.put(ch_idx_bytes, channel_bytes)
 
                 # get segmentation mask
                 naming_convention = naming_convention_dict[dataset]
