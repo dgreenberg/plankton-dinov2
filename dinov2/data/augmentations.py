@@ -52,6 +52,7 @@ class DataAugmentationDINO(object):
         use_native_res=False,
         patch_size=14,
         do_seg_crops=None,
+        do_multi_channel=False,
     ):
         self.global_crops_scale = global_crops_scale
         self.local_crops_scale = local_crops_scale
@@ -64,6 +65,7 @@ class DataAugmentationDINO(object):
             self.global_crops_area = self.global_crops_size * self.global_crops_size
         self.patch_size = patch_size
         self.do_seg_crops = do_seg_crops
+        self.do_multi_channel = do_multi_channel
 
         self.patch_maxpool_op = torch.nn.MaxPool2d(
             kernel_size=self.patch_size,
@@ -159,15 +161,26 @@ class DataAugmentationDINO(object):
             # normalization
             self.normalize = make_normalize_transform(use_kornia=True)
 
-            self.global_transfo1 = AugmentationSequential(
-                color_jittering, global_transfo1_extra, self.normalize
-            )
-            self.global_transfo2 = AugmentationSequential(
-                color_jittering, global_transfo2_extra, self.normalize
-            )
-            self.local_transfo = AugmentationSequential(
-                color_jittering, local_transfo_extra, self.normalize
-            )
+            if not self.do_multi_channel:
+                self.global_transfo1 = AugmentationSequential(
+                    color_jittering, global_transfo1_extra, self.normalize
+                )
+                self.global_transfo2 = AugmentationSequential(
+                    color_jittering, global_transfo2_extra, self.normalize
+                )
+                self.local_transfo = AugmentationSequential(
+                    color_jittering, local_transfo_extra, self.normalize
+                )
+            else:
+                self.global_transfo1 = AugmentationSequential(
+                    global_transfo1_extra, self.normalize
+                )
+                self.global_transfo2 = AugmentationSequential(
+                    global_transfo2_extra, self.normalize
+                )
+                self.local_transfo = AugmentationSequential(
+                    local_transfo_extra, self.normalize
+                )
 
         ######## TORCHVISION
         else:
