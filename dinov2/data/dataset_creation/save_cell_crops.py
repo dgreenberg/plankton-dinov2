@@ -2,15 +2,11 @@ import argparse
 import json
 import os
 import sys
-from typing import OrderedDict
 
 import imageio as io
 import imageio.v3 as iio
 import lmdb
 import numpy as np
-import pandas as pd
-from joblib import Parallel, delayed
-from skimage.measure import regionprops_table
 from tqdm import tqdm
 
 BASE_DIR = "/fast/AG_Kainmueller/data/pan_m"  # max cluster path
@@ -260,12 +256,11 @@ def change_lmdb_envs(
     return txn_meta, txn_imgs, txn_labels
 
 
-def load_channel_bytes(channel_path):
+def load_channel_img(channel_path):
     channel_img = iio.imread(channel_path)  # (N M)
     channel_img = normalize(np.squeeze(channel_img))
     channel_img = (channel_img * 255).astype(np.uint8)
-    jpg_encoded = iio.imwrite("<bytes>", channel_img, extension=".jpeg")
-    return jpg_encoded, channel_img.shape
+    return channel_img
 
 
 def main(args):
@@ -273,11 +268,9 @@ def main(args):
     end_fov_idx = args.end_fov_idx
 
     patch_size = args.patch_size
-    n_jobs = args.n_jobs
-    surrounding_size = patch_size // 2
     sel_dataset_paths = {k: dataset_paths[k] for k in args.dataset_keys}
 
-    base_lmdb_dir = BASE_DIR + "_lmdb"
+    base_lmdb_dir = BASE_DIR + args.base_lmdb_dir_name
     os.makedirs(base_lmdb_dir, exist_ok=True)
 
     for dataset, path in sel_dataset_paths.items():
@@ -304,6 +297,7 @@ def main(args):
         env_labels = lmdb.open(lmdb_labels_path, map_size=MAP_SIZE_IMG)
         env_metadata = lmdb.open(lmdb_metadata_path, map_size=MAP_SIZE_META)
 
+        naming_convention = naming_convention_dict[dataset]
         with (
             env_metadata.begin(write=True) as txn_meta,
             env_imgs.begin(write=True) as txn_imgs,
@@ -325,75 +319,69 @@ def main(args):
                     os.path.join(fov_path, channel) for channel in channels
                 ]
 
-                for ch_idx, channel_path in enumerate(channel_paths):
-                    channel_bytes, channel_shape = load_channel_bytes(channel_path)
-                    ch_idx_bytes = f"{img_idx}_ch{ch_idx}".encode("utf-8")
-                    txn_imgs.put(ch_idx_bytes, channel_bytes)
+                # get metadata
+                metadata_dict["fov"] = fov
+                metadata_dict["channel_names"] = channel_names
+                metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
 
                 # get segmentation mask
-                naming_convention = naming_convention_dict[dataset]
                 segmentation_path = naming_convention(fov)
                 segmentation_mask = (
                     io.v2.imread(segmentation_path).squeeze().astype(np.uint16)
                 )
-                idx_bytes = img_idx.encode("utf-8")
-                txn_labels.put(idx_bytes, segmentation_mask.tobytes())
 
-                metadata_dict["fov"] = fov
-                metadata_dict["channel_names"] = channel_names
-                metadata_dict["img_shape"] = channel_shape
-                metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
-                txn_meta.put(idx_bytes, metadata_bytes)
+                for ch_idx, channel_path in enumerate(channel_paths):
+                    channel_img = load_channel_img(channel_path)
+                    # do crops
+                    x_crop_idx = y_crop_idx = 0
+                    x_reached_end = y_reached_end = False
+                    while (
+                        patch_size * x_crop_idx < channel_img[0] and not x_reached_end
+                    ):
+                        x_0 = patch_size * x_crop_idx
+                        x_1 = patch_size * (x_crop_idx + 1)
+                        if channel_img.shape[0] - x_1 < patch_size / 2:
+                            # if less than half a patch remains, we take it all
+                            x_1 = -1
+                            x_reached_end = True
 
-                """
-                if args.do_cell_crops:
-                    # get regionprops
-                    regionprops = pd.DataFrame(
-                        regionprops_table(
-                            segmentation_mask, properties=("label", "centroid")
-                        )
-                    )
-                    # mirrorpad multiplex image to avoid edge effects
-                    # @Jerome alternatively, one could just drop regions that are too close to the edge
-                    multiplex_img = np.pad(
-                        multiplex_img,
-                        (
-                            (0, 0),
-                            (surrounding_size, surrounding_size),
-                            (surrounding_size, surrounding_size),
-                        ),
-                        mode="reflect",
-                    )
-                    regionprops["centroid-0"] = (
-                        regionprops["centroid-0"] + surrounding_size
-                    )
-                    regionprops["centroid-1"] = (
-                        regionprops["centroid-1"] + surrounding_size
-                    )
-                    # iterate over regions and extract patches surrounding centroids from multiplex image
-                    patches = Parallel(n_jobs=n_jobs)(
-                        delayed(
-                            lambda idx, region: multiplex_img[
-                                :,
-                                int(region["centroid-0"] - surrounding_size) : int(
-                                    region["centroid-0"] + surrounding_size
-                                ),
-                                int(region["centroid-1"] - surrounding_size) : int(
-                                    region["centroid-1"] + surrounding_size
-                                ),
-                            ]
-                        )(idx, region)
-                        for idx, region in regionprops.iterrows()
-                    )
+                        while (
+                            patch_size * y_crop_idx < channel_img[1]
+                            and not y_reached_end
+                        ):
+                            y_0 = patch_size * y_crop_idx
+                            y_1 = (patch_size * (y_crop_idx + 1),)
+                            if channel_img.shape[1] - y_1 < patch_size / 2:
+                                y_1 = -1
+                                x_reached_end = True
 
-                    # save patch, label, fov, dataset and channel_names for each training sample
-                    print(f"Saving {len(patches)} patches for img {img_idx}")
-                    for p_idx, patch in enumerate(patches):
-                        patch_bytes = patch.tobytes()
-                        full_idx = f"{img_idx}_{p_idx:03d}"
+                            crop = channel_img[x_0:x_1, y_0:y_1]
+                            cropped_mask = segmentation_mask[x_0:x_1, y_0:y_1]
+                            crop_jpg_encoded = iio.imwrite(
+                                "<bytes>", crop, extension=".jpeg"
+                            )
+                            patch_idx = f"{img_idx}_p{x_crop_idx + y_crop_idx}"
+                            crop_ch_idx_bytes = f"{patch_idx}_ch{ch_idx}".encode(
+                                "utf-8"
+                            )
+                            txn_imgs.put(crop_ch_idx_bytes, crop_jpg_encoded)
 
-                        idx_bytes = str(full_idx).encode("utf-8")
-                        txn_imgs.put(idx_bytes, patch_bytes)
+                            patch_idx_bytes = patch_idx.encode("utf-8")
+                            txn_labels.put(patch_idx_bytes, cropped_mask.tobytes())
+                            txn_meta.put(patch_idx_bytes, metadata_bytes)
+
+                            y_crop_idx += 1
+                        x_crop_idx += 1
+
+            """
+            # save patch, label, fov, dataset and channel_names for each training sample
+            print(f"Saving {len(patches)} patches for img {img_idx}")
+            for p_idx, patch in enumerate(patches):
+                patch_bytes = patch.tobytes()
+                full_idx = f"{img_idx}_{p_idx:03d}"
+
+                idx_bytes = str(full_idx).encode("utf-8")
+                txn_imgs.put(idx_bytes, patch_bytes)
             """
 
         env_imgs.close()
@@ -447,6 +435,9 @@ def get_args_parser():
         action=argparse.BooleanOptionalAction,
         help="Toggle cell crops generation, otherwise whole multiplex images are saved",
         default=False,
+    )
+    parser.add_argument(
+        "--base_lmdb_dir_name", type=str, help="Base lmdb dir name", default="_lmdb"
     )
 
     return parser

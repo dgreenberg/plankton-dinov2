@@ -30,12 +30,10 @@ class ExtendedVisionDataset(VisionDataset):
         self, index: int
     ) -> Union[Tuple[Any, Any], torch.Tensor, Image.Image]:
         num_channels = 3  # base number
-        img_shape = None
         img_bytes = self.get_image_data(index)
-        if isinstance(img_bytes, tuple):  # image
-            img_bytes, image_shape = img_bytes
+        if isinstance(img_bytes, list):  # image
             image = [
-                torch.from_numpy(iio.imread(ch_bytes, index=None)).reshape(image_shape)
+                torch.from_numpy(iio.imread(ch_bytes, index=None))
                 for ch_bytes in img_bytes
             ]
             image = torch.stack(image, dim=0)
@@ -47,10 +45,6 @@ class ExtendedVisionDataset(VisionDataset):
 
                 if "plankton" in str(self.root):
                     image = decode_image(image, ImageReadMode.RGB)
-                elif img_shape is not None:
-                    image = decode_image(image, ImageReadMode.UNCHANGED)
-                    print(image.shape)
-                    # image = image.reshape(img_shape) # not working
                 else:
                     image_size = int(np.sqrt(image.shape[0] / num_channels))
                     image = image.reshape(num_channels, image_size, image_size)
