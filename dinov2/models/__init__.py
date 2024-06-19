@@ -19,6 +19,7 @@ def build_model(
     free_shapes=None,
     num_loc_crops=8,
     use_ch_patch_embed=False,
+    in_chans=3,
 ):
     args.arch = args.arch.removesuffix("_memeff")
     if "vit" in args.arch:
@@ -37,6 +38,7 @@ def build_model(
             free_shapes=free_shapes,
             num_loc_crops=num_loc_crops,
             use_ch_patch_embed=use_ch_patch_embed,
+            in_chans=in_chans,
         )
         teacher = vits.__dict__[args.arch](**vit_kwargs)
         if only_teacher:
@@ -58,4 +60,5 @@ def build_model_from_cfg(cfg, only_teacher=False):
         free_shapes=none_or_str(cfg.crops.free_shapes),
         num_loc_crops=cfg.crops.local_crops_number,
         use_ch_patch_embed=cfg.train.use_ch_patch_embed,
+        in_chans=cfg.train.in_chans,
     )

@@ -166,7 +166,7 @@ def select_collate_fn(cfg, n_tokens, mask_generator, inputs_dtype):
     return collate_fn_cpu, collate_fn_gpu
 
 
-def select_augmentations(cfg):
+def select_augmentations(cfg, do_multi_channel=False):
     print(f"---- USING AUGMENTATION: {cfg.train.augmentations} ----")
     aug_kwargs = {
         "global_crops_scale": cfg.crops.global_crops_scale,
@@ -177,7 +177,7 @@ def select_augmentations(cfg):
         "patch_size": cfg.student.patch_size,
         "use_native_res": cfg.crops.use_native_res,
         "do_seg_crops": none_or_str(cfg.crops.free_shapes),
-        "do_multi_channel": cfg.train.do_multi_channel,
+        "do_multi_channel": do_multi_channel,
     }
     if cfg.train.augmentations == AugmentationType.TORCHV_CPU.value:
         data_transform_cpu = DataAugmentationDINO(use_kornia=False, **aug_kwargs)
@@ -282,8 +282,10 @@ def do_train(cfg, model, resume=False):
         input_size=(img_size // patch_size, img_size // patch_size),
         max_num_patches=0.5 * img_size // patch_size * img_size // patch_size,
     )
-
-    data_transform_cpu, data_transform_gpu = select_augmentations(cfg)
+    do_multi_channel = model.student.backbone.in_chans > 3
+    data_transform_cpu, data_transform_gpu = select_augmentations(
+        cfg, do_multi_channel=do_multi_channel
+    )
     collate_fn_cpu, collate_fn_gpu = select_collate_fn(
         cfg, n_tokens, mask_generator, inputs_dtype
     )
@@ -294,7 +296,6 @@ def do_train(cfg, model, resume=False):
     print(f"Number of tokens {n_tokens}")
 
     # setup data loader
-
     dataset = make_dataset(
         dataset_str=cfg.train.dataset_path,
         transform=data_transform_cpu,
