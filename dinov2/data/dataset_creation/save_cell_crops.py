@@ -398,7 +398,7 @@ def get_args_parser():
         dest="patch_size",
         type=int,
         help="Patch size",
-        default=224,
+        default=512,
     )
     parser.add_argument(
         "--n_jobs",
