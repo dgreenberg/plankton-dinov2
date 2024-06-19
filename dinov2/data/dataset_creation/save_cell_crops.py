@@ -263,6 +263,7 @@ def change_lmdb_envs(
 def load_channel_bytes(channel_path):
     channel_img = iio.imread(channel_path)  # (N M)
     channel_img = normalize(np.squeeze(channel_img))
+    channel_img = (channel_img * 255).astype(np.uint8)
     jpg_encoded = iio.imwrite("<bytes>", channel_img, extension=".jpeg")
     return jpg_encoded
 
