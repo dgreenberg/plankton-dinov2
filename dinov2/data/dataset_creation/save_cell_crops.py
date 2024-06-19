@@ -336,7 +336,8 @@ def main(args):
                     x_crop_idx = y_crop_idx = 0
                     x_reached_end = y_reached_end = False
                     while (
-                        patch_size * x_crop_idx < channel_img[0] and not x_reached_end
+                        patch_size * x_crop_idx < channel_img.shape[0]
+                        and not x_reached_end
                     ):
                         x_0 = patch_size * x_crop_idx
                         x_1 = patch_size * (x_crop_idx + 1)
@@ -346,7 +347,7 @@ def main(args):
                             x_reached_end = True
 
                         while (
-                            patch_size * y_crop_idx < channel_img[1]
+                            patch_size * y_crop_idx < channel_img.shape[1]
                             and not y_reached_end
                         ):
                             y_0 = patch_size * y_crop_idx
