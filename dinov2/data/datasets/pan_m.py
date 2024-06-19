@@ -33,7 +33,7 @@ class PanMDataset(ImageNet):
         num_ch = entry["num_ch"]
         image_shape = entry["image_shape"]
         image_data = [
-            lmdb_txn.get(f"{entry["index"]}_ch{i}".encode("utf-8"))
+            lmdb_txn.get(f"{entry['index']}_ch{i}".encode("utf-8"))
             for i in range(num_ch)
         ]
 
