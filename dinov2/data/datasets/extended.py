@@ -35,7 +35,7 @@ class ExtendedVisionDataset(VisionDataset):
         if isinstance(img_bytes, tuple):  # image
             img_bytes, image_shape = img_bytes
             image = [
-                torch.fom_numpy(iio.imread(ch_bytes, index=None)).reshape(image_shape)
+                torch.from_numpy(iio.imread(ch_bytes, index=None)).reshape(image_shape)
                 for ch_bytes in img_bytes
             ]
             image = torch.stack(image, dim=0)
