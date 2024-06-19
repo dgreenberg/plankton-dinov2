@@ -224,7 +224,7 @@ dataset_paths = {
 
 
 def normalize(x):
-    return (x - x.min()) / (x.max() - x.min())
+    return (x - x.min()) / (x.max() - x.min() + 1e-5)
 
 
 def change_lmdb_envs(
