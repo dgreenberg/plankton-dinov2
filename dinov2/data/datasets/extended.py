@@ -6,6 +6,7 @@
 import sys
 from typing import Any, Tuple, Union
 
+import imageio.v3 as iio
 import numpy as np
 import torch
 from PIL import Image
@@ -34,9 +35,7 @@ class ExtendedVisionDataset(VisionDataset):
         if isinstance(img_bytes, tuple):  # image
             img_bytes, image_shape = img_bytes
             image = [
-                torch.frombuffer(np.copy(ch_bytes), dtype=torch.uint8).reshape(
-                    image_shape
-                )
+                torch.fom_numpy(iio.imread(ch_bytes, index=None)).reshape(image_shape)
                 for ch_bytes in img_bytes
             ]
             image = torch.stack(image, dim=0)
