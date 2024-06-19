@@ -351,7 +351,7 @@ def main(args):
                             and not y_reached_end
                         ):
                             y_0 = patch_size * y_crop_idx
-                            y_1 = (patch_size * (y_crop_idx + 1),)
+                            y_1 = patch_size * (y_crop_idx + 1)
                             if channel_img.shape[1] - y_1 < patch_size / 2:
                                 y_1 = -1
                                 x_reached_end = True
