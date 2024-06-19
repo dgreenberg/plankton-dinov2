@@ -30,16 +30,18 @@ class ExtendedVisionDataset(VisionDataset):
     ) -> Union[Tuple[Any, Any], torch.Tensor, Image.Image]:
         num_channels = 3  # base number
         img_shape = None
-        return_tuple = self.get_image_data(index)
-        if isinstance(return_tuple, dict):  # image
+        img_bytes = self.get_image_data(index)
+        if isinstance(img_bytes, tuple):  # image
+            img_bytes, image_shape = img_bytes
             image = [
-                torch.frombuffer(np.copy(ch_bytes), dtype=torch.float32)
-                for ch_bytes in return_tuple.values()
+                torch.frombuffer(np.copy(ch_bytes), dtype=torch.uint8).reshape(
+                    image_shape
+                )
+                for ch_bytes in img_bytes
             ]
             image = torch.stack(image, dim=0)
 
         else:
-            img_bytes = return_tuple
             try:
                 # have to copy bc stream not writeable
                 image = torch.frombuffer(np.copy(img_bytes), dtype=torch.uint8)

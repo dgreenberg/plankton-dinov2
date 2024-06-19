@@ -265,7 +265,7 @@ def load_channel_bytes(channel_path):
     channel_img = normalize(np.squeeze(channel_img))
     channel_img = (channel_img * 255).astype(np.uint8)
     jpg_encoded = iio.imwrite("<bytes>", channel_img, extension=".jpeg")
-    return jpg_encoded
+    return jpg_encoded, channel_img.shape
 
 
 def main(args):
@@ -326,7 +326,7 @@ def main(args):
                 ]
 
                 for ch_idx, channel_path in enumerate(channel_paths):
-                    channel_bytes = load_channel_bytes(channel_path)
+                    channel_bytes, channel_shape = load_channel_bytes(channel_path)
                     ch_idx_bytes = f"{img_idx}_ch{ch_idx}".encode("utf-8")
                     txn_imgs.put(ch_idx_bytes, channel_bytes)
 
@@ -341,6 +341,7 @@ def main(args):
 
                 metadata_dict["fov"] = fov
                 metadata_dict["channel_names"] = channel_names
+                metadata_dict["image_shape"] = channel_shape
                 metadata_bytes = json.dumps(metadata_dict).encode("utf-8")
                 txn_meta.put(idx_bytes, metadata_bytes)
 

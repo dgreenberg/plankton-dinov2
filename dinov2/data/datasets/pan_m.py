@@ -30,9 +30,14 @@ class PanMDataset(ImageNet):
     def get_image_data(self, index: int) -> bytes:
         entry = self._entries[index]
         lmdb_txn = self._lmdb_txns[entry["lmdb_imgs_file"]]
-        image_data = lmdb_txn.get(str(entry["index"]).encode("utf-8"))
+        num_ch = entry["num_ch"]
+        image_shape = entry["image_shape"]
+        image_data = [
+            lmdb_txn.get(f"{entry["index"]}_ch{i}".encode("utf-8"))
+            for i in range(num_ch)
+        ]
 
-        return ast.literal_eval(image_data)  # return dict of channel image bytes
+        return image_data, image_shape  # return list of channel image bytes
 
     def get_target(self, index: int) -> Optional[Target]:
         if self.split in [_SplitLMDBDataset.TEST, _SplitLMDBDataset.ALL]:
