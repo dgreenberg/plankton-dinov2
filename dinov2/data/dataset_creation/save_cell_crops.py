@@ -357,9 +357,12 @@ def main(args):
                                 x_reached_end = True
 
                             crop = channel_img[x_0:x_1, y_0:y_1]
-                            cropped_mask = segmentation_mask[x_0:x_1, y_0:y_1]
+                            crop_mask = segmentation_mask[x_0:x_1, y_0:y_1]
                             crop_jpg_encoded = iio.imwrite(
                                 "<bytes>", crop, extension=".jpeg"
+                            )
+                            crop_mask_jpg_encoded = iio.imwrite(
+                                "<bytes>", crop_mask, extension=".jpeg"
                             )
                             patch_idx = f"{img_idx}_p{x_crop_idx + y_crop_idx}"
                             crop_ch_idx_bytes = f"{patch_idx}_ch{ch_idx}".encode(
@@ -368,7 +371,7 @@ def main(args):
                             txn_imgs.put(crop_ch_idx_bytes, crop_jpg_encoded)
 
                             patch_idx_bytes = patch_idx.encode("utf-8")
-                            txn_labels.put(patch_idx_bytes, cropped_mask.tobytes())
+                            txn_labels.put(patch_idx_bytes, crop_mask_jpg_encoded)
                             txn_meta.put(patch_idx_bytes, metadata_bytes)
 
                             y_crop_idx += 1
