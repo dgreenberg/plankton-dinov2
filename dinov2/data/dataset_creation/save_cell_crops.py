@@ -327,7 +327,7 @@ def main(args):
                 # get segmentation mask
                 segmentation_path = naming_convention(fov)
                 segmentation_mask = (
-                    io.v2.imread(segmentation_path).squeeze().astype(np.uint16)
+                    iio.imread(segmentation_path).squeeze().astype(np.uint8)
                 )
 
                 for ch_idx, channel_path in enumerate(channel_paths):
