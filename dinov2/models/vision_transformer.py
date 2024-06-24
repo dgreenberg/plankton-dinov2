@@ -133,13 +133,27 @@ class DinoVisionTransformer(nn.Module):
             embed_layer = PatchEmbedPerChannel
         else:
             embed_layer = PatchEmbed
-        self.patch_embed = embed_layer(
-            img_size=img_size,
-            patch_size=patch_size,
-            in_chans=in_chans,
-            embed_dim=embed_dim,
-        )
-        num_patches = self.patch_embed.num_patches
+
+        if isinstance(in_chans, int):
+            self.patch_embed = embed_layer(
+                img_size=img_size,
+                patch_size=patch_size,
+                in_chans=in_chans,
+                embed_dim=embed_dim,
+            )
+            num_patches = self.patch_embed.num_patches
+        else:  # list of channels
+            self.patch_embed = {
+                ch: embed_layer(
+                    img_size=img_size,
+                    patch_size=patch_size,
+                    in_chans=ch,
+                    embed_dim=embed_dim,
+                )
+                for ch in in_chans
+            }
+            num_patches = self.patch_embed[min(in_chans)].num_patches
+
         if self.use_ch_patch_embed:
             num_patches = int(num_patches / in_chans)
         self.num_loc_crops = num_loc_crops
@@ -382,8 +396,11 @@ class DinoVisionTransformer(nn.Module):
 
         # newly created pos embed vect also needs padding
         # b c w h OR b c p (n p)
-        w, h = x.size(-2), x.size(-1)
-        x = self.patch_embed(x)  # b n d (=384)
+        b, c, w, h = x.size()
+        if isinstance(self.patch_embed, dict):
+            x = self.patch_embed[c](x)
+        else:
+            x = self.patch_embed(x)  # b n d (=384)
         x_dim = x.shape[-1]
 
         if masks is not None:

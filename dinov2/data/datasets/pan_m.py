@@ -10,7 +10,7 @@ import numpy as np
 from dinov2.data.datasets import ImageNet
 from dinov2.data.datasets.extended import ExtendedVisionDataset
 
-_TargetLMDBDataset = int
+_TargetLMDBDataset = int  # TODO: change to seg labels
 
 
 class _SplitLMDBDataset(Enum):
