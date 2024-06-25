@@ -80,6 +80,8 @@ class PanMDataset(ImageNet):
         # extra_full_path = self._get_extra_full_path(extra_path)
         print("extra_path", extra_path)
         file_list = glob.glob(extra_path)
+        if len(file_list) < 50:
+            file_list = glob.glob(os.path.join(extra_path, "*"))
 
         file_list_labels = sorted([el for el in file_list if el.endswith("labels")])
         file_list_imgs = sorted(
