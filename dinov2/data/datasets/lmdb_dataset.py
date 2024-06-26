@@ -88,14 +88,26 @@ class LMDBDataset(ImageNet):
         if self.do_short_run:
             file_list_labels = file_list_labels[:1]
             file_list_imgs = file_list_imgs[:1]
-        for lmdb_path_labels, lmdb_path_imgs in zip(file_list_labels, file_list_imgs):
-            lmdb_env_labels = lmdb.open(
-                lmdb_path_labels,
-                readonly=True,
-                lock=False,
-                readahead=False,
-                meminit=False,
-            )
+
+        if len(file_list_labels) > 0:
+            lists_to_iterate = zip(file_list_labels, file_list_imgs)
+        else:
+            lists_to_iterate = file_list_imgs
+        for iter_obj in lists_to_iterate:
+            if len(file_list_labels) > 0:
+                lmdb_path_labels, lmdb_path_imgs = iter_obj
+                lmdb_env_labels = lmdb.open(
+                    lmdb_path_labels,
+                    readonly=True,
+                    lock=False,
+                    readahead=False,
+                    meminit=False,
+                )
+                lmdb_txn_labels = lmdb_env_labels.begin()
+
+            else:
+                lmdb_path_imgs = iter_obj
+
             lmdb_env_imgs = lmdb.open(
                 lmdb_path_imgs,
                 readonly=True,
@@ -106,16 +118,18 @@ class LMDBDataset(ImageNet):
             # ex: "/home/jluesch/Documents/data/plankton/lmdb/2007-TRAIN")
             print(lmdb_path_imgs, "lmdb_env_imgs.stat()", lmdb_env_imgs.stat())
 
-            lmdb_txn_labels = lmdb_env_labels.begin()
             lmdb_txn_imgs = lmdb_env_imgs.begin()
             # save img tcxn from which to get labels later
             self._lmdb_txns[lmdb_path_imgs] = lmdb_txn_imgs
 
-            lmdb_cursor = lmdb_txn_labels.cursor()
+            if len(file_list_labels) > 0:
+                lmdb_cursor = lmdb_txn_labels.cursor()
+            else:
+                lmdb_cursor = lmdb_txn_imgs.cursor()
             for key, value in lmdb_cursor:
                 entry = dict()
                 entry["index"] = key.decode()
-                if self.with_targets:
+                if self.with_targets and len(file_list_labels) > 0:
                     entry["class_id"] = int(value.decode())
 
                 entry["lmdb_imgs_file"] = lmdb_path_imgs
