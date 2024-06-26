@@ -48,12 +48,11 @@ def find_files(folder,  ext=None):
 
 
 def main(args):
+    if args.extension.startswith('.'): args.extension = '.' + args.extension
     img_relpath, img_abspath = find_files(args.dataset_path, ext=args.extension)
 
     lmdb_dir = os.path.abspath(args.lmdb_dir_name)
     os.makedirs(lmdb_dir, exist_ok=True)
-    file_idx = 0
-    env_imgs, env_labels, env_metadata = None, None, None
     print(f"TOTAL #images {len(img_abspath)} FROM {args.dataset_path}")
     lmdb_imgs_path = lmdb_dir + "-TRAIN_imgs"
     lmdb_labels_path = lmdb_dir + "-TRAIN_labels"
