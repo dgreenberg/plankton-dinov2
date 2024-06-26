@@ -56,7 +56,7 @@ def main(args):
     env_imgs, env_labels, env_metadata = None, None, None
     print(f"TOTAL #images {len(img_abspath)} FROM {args.dataset_path}")
     lmdb_imgs_path = lmdb_dir + "-TRAIN_imgs"
-    lmdb_labels_path = lmbd_dir + "-TRAIN_labels"
+    lmdb_labels_path = lmdb_dir + "-TRAIN_labels"
     os.makedirs(lmdb_imgs_path, exist_ok=True)
     # os.makedirs(lmdb_labels_path, exist_ok=True)
 
