@@ -48,7 +48,7 @@ def find_files(folder,  ext=None):
 
 
 def main(args):
-    if args.extension.startswith('.'): args.extension = '.' + args.extension
+    if not args.extension.startswith('.'): args.extension = '.' + args.extension
     img_relpath, img_abspath = find_files(args.dataset_path, ext=args.extension)
 
     lmdb_dir = os.path.abspath(args.lmdb_dir_name)
