@@ -94,22 +94,10 @@ def get_args_parser():
         help="""Name of dataset to process.""",
     )
     parser.add_argument(
-        "--start_fov_idx",
-        type=int,
-        help="Start index of FOVs to process",
-        default=0,
-    )
-    parser.add_argument(
-        "--end_fov_idx",
-        type=int,
-        help="End index of FOVs to process",
-        default=-1,
-    )
-    parser.add_argument(
         "--lmdb_dir_name", type=str, help="Base lmdb dir name", default="_lmdb"
     )
     parser.add_argument(
-        "--extension", type=str, help="Image extension for saving inside lmdb", defalut="png"
+        "--extension", type=str, help="Image extension for saving inside lmdb", default="png"
     )
 
     return parser
