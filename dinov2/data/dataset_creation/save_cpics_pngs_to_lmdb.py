@@ -82,7 +82,7 @@ def main(args):
 
     env_imgs.close()
     #env_labels.close()
-    print(f"FINISHED DATASET {dataset}, SAVED AT: {dataset_lmdb_dir}")
+    print(f"Finished importing from {args.dataset_path} and subdirectories, saved at: {lmdb_imgs_path}")
 
 
 def get_args_parser():
